@@ -47,17 +47,29 @@ jobs:
           EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
           EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
 
-      - name: Fix Gradle properties
+      - name: Fix Kotlin version and Gradle properties
         run: |
           chmod +x android/gradlew
+          echo "=== Patching android/build.gradle Kotlin version to 1.9.25 ==="
+          # Patch the top-level build.gradle to use Kotlin 1.9.25
+          if [ -f android/build.gradle ]; then
+            sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/g' android/build.gradle
+            sed -i "s/kotlinVersion = '1.9.24'/kotlinVersion = '1.9.25'/g" android/build.gradle
+            # Also catch any other 1.9.2x versions
+            sed -i 's/kotlinVersion = "1\.9\.2[0-9]"/kotlinVersion = "1.9.25"/g' android/build.gradle
+            echo "=== android/build.gradle after patch ==="
+            grep -A2 -B2 "kotlin" android/build.gradle | head -20 || true
+          fi
+          # Fix gradle.properties
           sed -i '/android\.kotlinVersion/d' android/gradle.properties
           sed -i '/kotlin\.version/d' android/gradle.properties
+          sed -i '/kotlinVersion/d' android/gradle.properties
           printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\n' >> android/gradle.properties
           printf 'org.gradle.daemon=false\n' >> android/gradle.properties
           printf 'org.gradle.parallel=false\n' >> android/gradle.properties
           printf 'org.gradle.configureondemand=false\n' >> android/gradle.properties
           printf 'android.suppressUnsupportedCompileSdk=35\n' >> android/gradle.properties
-          printf 'kotlin.version=1.9.25\n' >> android/gradle.properties
+          printf 'android.kotlinVersion=1.9.25\n' >> android/gradle.properties
           echo "=== gradle.properties ==="
           cat android/gradle.properties
 
@@ -124,17 +136,18 @@ jobs:
             - 🧠 **6 AI Models** — Llama 4 Maverick, DeepSeek R1, QwQ 32B, Vision 90B + more
             - 🔑 **7 Rotating Groq Keys** — auto-failover, zero downtime
             - 👁️ **Vision Analysis** — 90B parameter vision model
-            - 🌐 **Web Search** — Jina AI powered
-            - 🎨 **AI Image Generation** — Pollinations AI
-            - 🎬 **Video Storyboard** — 4-scene AI generator
+            - 🌐 **Web Search** — Jina AI real-time results
+            - 🎨 **AI Image Generation** — Pollinations AI 768×768
+            - 🎬 **Video Storyboard** — 4-scene AI storyboard generator
             - 🔧 **Code Builder** — generates & pushes to GitHub autonomously
-            - 🔒 **Encrypted Vault** — Android Keystore secured
-            - ✍️ **Self-Improving** — agent can push code to GitHub
+            - 🔒 **Encrypted Vault** — Android Keystore / Keychain secured
+            - ✍️ **Self-Improving Agent** — can push code to GitHub to evolve itself
+            - 🌌 **Ultra-Premium Design** — animated star field, glassmorphism, neon glow
 
-            ### توقيع رقمي / Digital Signature
-            - Algorithm: RSA-4096
-            - Validity: 10,000 days (~27 years)
-            - Issuer: NEBULA STUDIO PRO / Cairo, EG
+            ### التوقيع الرقمي / Digital Signature
+            - **Algorithm**: RSA-4096
+            - **Validity**: 10,000 days (~27 years)
+            - **Issued to**: NEBULA STUDIO PRO / Cairo, EG
           files: nebula-studio-pro-signed.apk
           draft: false
           prerelease: false
