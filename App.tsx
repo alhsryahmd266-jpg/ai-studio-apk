@@ -129,6 +129,13 @@ export default function App() {
   const [error, setError] = useState(null);
   const [keys, setKeys] = useState({});
   const [showVault, setShowVault] = useState(false);
+  // ── AGENT STATE ──────────────────────────────────────────
+  const [agentGoal, setAgentGoal]         = useState('');
+  const [agentSteps, setAgentSteps]       = useState([]);
+  const [agentRunning, setAgentRunning]   = useState(false);
+  const [agentMemory, setAgentMemory]     = useState({});
+  const [agentHistory, setAgentHistory]   = useState([]);
+
   const [visionImage, setVisionImage] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
   const [creationImage, setCreationImage] = useState(null);
@@ -170,7 +177,7 @@ export default function App() {
     if (keys.GROQ_OVERRIDE) return keys.GROQ_OVERRIDE;
     const keyNum = (groqIndex.current % 7) + 1;
     groqIndex.current++;
-    return process.env['EXPO_PUBLIC_GROQ_KEY_' + str(keyNum)] || '';
+    const envKey = process.env['EXPO_PUBLIC_GROQ_KEY_' + String(keyNum)] || '';  return envKey;
   };
 
   // --- API CALLS ---
@@ -213,6 +220,255 @@ export default function App() {
     }
     throw lastErr;
   };
+
+  
+  // ════════════════════════════════════════════════════════
+  //  AUTONOMOUS AGENT — ReAct Loop (Reason + Act + Observe)
+  //  Same engine as Replit Agent. Thinks, uses tools, fixes.
+  // ════════════════════════════════════════════════════════
+
+  const AGENT_SYSTEM = `You are an autonomous AI agent with full tool access.
+You operate in a ReAct loop: Think → Act → Observe → Repeat.
+
+TOOLS (call with exact syntax):
+  [TOOL: search_web    | {"query":"..."}]
+  [TOOL: fetch_url     | {"url":"https://..."}]
+  [TOOL: calculate     | {"expr":"2+2"}]
+  [TOOL: get_datetime  | {}]
+  [TOOL: generate_image| {"prompt":"..."}]
+  [TOOL: build_app     | {"description":"..."}]
+  [TOOL: push_github   | {"token":"...","repo":"owner/repo","path":"App.tsx","content":"...","message":"..."}]
+  [TOOL: read_memory   | {"key":"..."}]
+  [TOOL: save_memory   | {"key":"...","value":"..."}]
+  [TOOL: fix_error     | {"error":"...","context":"..."}]
+
+RULES:
+1. Start with THOUGHT: analyse the goal.
+2. Use exactly one tool per step.
+3. After OBSERVATION, decide next step.
+4. Write FINAL ANSWER: when done.
+5. If something fails, call fix_error to diagnose and retry.
+6. You have up to 10 iterations — be efficient.`;
+
+  const agentTools = {
+    search_web: async ({ query }) => {
+      try {
+        const r = await fetch('https://s.jina.ai/' + encodeURIComponent(query),
+          { headers: { Accept: 'application/json', 'X-Return-Format': 'text' } });
+        const t = await r.text();
+        return t.slice(0, 3000);
+      } catch (e) { return 'Search failed: ' + e.message; }
+    },
+    fetch_url: async ({ url }) => {
+      try {
+        const r = await fetch('https://r.jina.ai/' + url,
+          { headers: { Accept: 'text/plain' } });
+        const t = await r.text();
+        return t.slice(0, 3000);
+      } catch (e) { return 'Fetch failed: ' + e.message; }
+    },
+    calculate: ({ expr }) => {
+      try { return String(eval(expr)); } catch (e) { return 'Calc error: ' + e.message; }
+    },
+    get_datetime: () => new Date().toLocaleString('ar-EG'),
+    generate_image: async ({ prompt }) => {
+      const url = 'https://image.pollinations.ai/prompt/' +
+        encodeURIComponent(prompt) + '?width=768&height=768&nologo=true&seed=' + Date.now();
+      return 'IMAGE_URL::' + url;
+    },
+    build_app: async ({ description }) => {
+      try {
+        const res = await callGroq(
+          'Write complete React Native Expo App.tsx code for: ' + description +
+          '\nReturn only valid TypeScript code. No markdown.',
+          'meta-llama/llama-4-maverick-17b-128e-instruct', [], ''
+        );
+        return (res.choices?.[0]?.message?.content || '').slice(0, 4000);
+      } catch (e) { return 'Build failed: ' + e.message; }
+    },
+    push_github: async ({ token, repo, path: filePath, content, message }) => {
+      try {
+        const tk = token || keys.GITHUB_TOKEN;
+        if (!tk) return 'Error: no GitHub token. Add in Vault first.';
+        const shaRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`,
+          { headers: { Authorization: 'token ' + tk } });
+        const shaJson = await shaRes.json();
+        const sha = shaJson.sha;
+        const body = { message, content: btoa(unescape(encodeURIComponent(content))),
+          ...(sha ? { sha } : {}) };
+        const r = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+          method: 'PUT',
+          headers: { Authorization: 'token ' + tk, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const j = await r.json();
+        return j.commit?.sha ? 'Pushed ✅ commit: ' + j.commit.sha.slice(0,8) : 'Push failed: ' + JSON.stringify(j).slice(0,200);
+      } catch (e) { return 'Push error: ' + e.message; }
+    },
+    read_memory: ({ key }) => {
+      const v = agentMemory[key];
+      return v !== undefined ? String(v) : 'No memory for key: ' + key;
+    },
+    save_memory: ({ key, value }) => {
+      setAgentMemory(prev => ({ ...prev, [key]: value }));
+      return 'Saved ✅';
+    },
+    fix_error: async ({ error, context }) => {
+      try {
+        const res = await callGroq(
+          `Error encountered: ${error}\nContext: ${context}\n\nDiagnose the root cause and suggest a concrete fix in 3 steps.`,
+          'deepseek-r1-distill-llama-70b', [], ''
+        );
+        return res.choices?.[0]?.message?.content || 'Could not diagnose';
+      } catch (e) { return 'Diagnosis failed: ' + e.message; }
+    },
+  };
+
+  const parseToolCall = (text) => {
+    const match = text.match(/\[TOOL:\s*(\w+)\s*\|\s*(\{[^\]]*\})\]/s);
+    if (!match) return null;
+    try {
+      return { name: match[1].trim(), args: JSON.parse(match[2]) };
+    } catch { return { name: match[1].trim(), args: {} }; }
+  };
+
+  const addStep = (step) => setAgentSteps(prev => [...prev, step]);
+
+  const runAgent = async () => {
+    if (!agentGoal.trim() || agentRunning) return;
+    setAgentRunning(true);
+    setAgentSteps([]);
+
+    const startStep = {
+      id: Date.now(), type: 'goal',
+      text: '🎯 الهدف: ' + agentGoal,
+      ts: new Date().toLocaleTimeString(),
+    };
+    setAgentSteps([startStep]);
+
+    const history = [];
+    const MAX_ITER = 10;
+    let iteration = 0;
+
+    try {
+      while (iteration < MAX_ITER) {
+        iteration++;
+
+        // ── Think ────────────────────────────────────────────
+        const thinkStep = {
+          id: Date.now() + iteration, type: 'thinking',
+          text: '🧠 التفكير — خطوة ' + iteration + '/' + MAX_ITER + '…',
+          ts: new Date().toLocaleTimeString(),
+        };
+        setAgentSteps(prev => [...prev, thinkStep]);
+
+        let prompt = iteration === 1
+          ? 'GOAL: ' + agentGoal + '\n\nStart by thinking about what steps are needed, then call the first tool.'
+          : 'Continue working on the goal. History so far:\n' +
+            history.slice(-4).map(h => h.role + ': ' + (typeof h.content==='string'?h.content.slice(0,500):'')).join('\n') +
+            '\n\nWhat is your next step?';
+
+        let llmResp;
+        try {
+          llmResp = await callGroq(prompt, selectedModel, history, AGENT_SYSTEM);
+        } catch (e) {
+          llmResp = await callGroq(prompt, 'meta-llama/llama-4-scout-17b-16e-instruct', history, AGENT_SYSTEM);
+        }
+
+        const rawText = llmResp.choices?.[0]?.message?.content || '';
+        history.push({ role: 'assistant', content: rawText });
+
+        // ── Parse thinking block ─────────────────────────────
+        const thinkMatch = rawText.match(/<think>([\s\S]*?)<\/think>/i);
+        if (thinkMatch) {
+          setAgentSteps(prev => [...prev, {
+            id: Date.now() + 100 + iteration, type: 'thought',
+            text: '💭 ' + thinkMatch[1].trim().slice(0, 500),
+            ts: new Date().toLocaleTimeString(),
+          }]);
+        }
+
+        // ── Check for FINAL ANSWER ───────────────────────────
+        if (/FINAL ANSWER:/i.test(rawText)) {
+          const answer = rawText.replace(/<think>[\s\S]*?<\/think>/gi, '')
+            .split(/FINAL ANSWER:/i)[1]?.trim() || rawText;
+          setAgentSteps(prev => [...prev, {
+            id: Date.now() + 200, type: 'done',
+            text: '✅ الإجابة النهائية:\n' + answer,
+            ts: new Date().toLocaleTimeString(),
+          }]);
+          setAgentHistory(prev => [...prev, { goal: agentGoal, answer, ts: new Date().toISOString() }]);
+          break;
+        }
+
+        // ── Parse tool call ──────────────────────────────────
+        const tool = parseToolCall(rawText);
+        if (!tool) {
+          // No tool call and no final answer — try one more iteration
+          if (iteration >= MAX_ITER - 1) {
+            setAgentSteps(prev => [...prev, {
+              id: Date.now() + 300, type: 'done',
+              text: '⚠️ انتهت التكرارات. آخر رد:\n' + rawText.replace(/<think>[\s\S]*?<\/think>/gi,'').trim().slice(0,800),
+              ts: new Date().toLocaleTimeString(),
+            }]);
+          }
+          continue;
+        }
+
+        // ── Show tool call ───────────────────────────────────
+        setAgentSteps(prev => [...prev, {
+          id: Date.now() + 400 + iteration, type: 'tool_call',
+          text: '🔧 أداة: ' + tool.name + '\n' + JSON.stringify(tool.args, null, 2).slice(0, 200),
+          ts: new Date().toLocaleTimeString(),
+        }]);
+
+        // ── Execute tool ─────────────────────────────────────
+        let observation = '';
+        try {
+          const fn = agentTools[tool.name];
+          if (fn) {
+            const result = await fn(tool.args);
+            observation = typeof result === 'string' ? result : JSON.stringify(result);
+          } else {
+            observation = 'Unknown tool: ' + tool.name;
+          }
+        } catch (e) {
+          observation = 'Tool error: ' + e.message;
+          // Auto-fix on error
+          try {
+            const fix = await agentTools.fix_error({ error: e.message, context: tool.name + ' ' + JSON.stringify(tool.args) });
+            observation += '\n\nDiagnosis: ' + fix;
+          } catch {}
+        }
+
+        // ── Show observation ─────────────────────────────────
+        const isImage = observation.startsWith('IMAGE_URL::');
+        setAgentSteps(prev => [...prev, {
+          id: Date.now() + 500 + iteration, type: isImage ? 'image' : 'observation',
+          text: isImage ? observation.replace('IMAGE_URL::', '') : '👁️ النتيجة:\n' + observation.slice(0, 600),
+          ts: new Date().toLocaleTimeString(),
+          imageUrl: isImage ? observation.replace('IMAGE_URL::', '') : null,
+        }]);
+
+        history.push({ role: 'user', content: 'OBSERVATION: ' + observation.slice(0, 2000) });
+      }
+    } catch (e) {
+      setAgentSteps(prev => [...prev, {
+        id: Date.now() + 999, type: 'error',
+        text: '❌ خطأ في الوكيل: ' + e.message,
+        ts: new Date().toLocaleTimeString(),
+      }]);
+    } finally {
+      setAgentRunning(false);
+    }
+  };
+
+  // Auto-invoke agent on app errors (self-healing)
+  const invokeAgentForFix = useCallback(async (errMsg, context) => {
+    setAgentGoal('أصلح هذا الخطأ تلقائياً: ' + errMsg + ' | السياق: ' + context);
+    setActiveTab('Agent');
+    setTimeout(() => runAgent(), 300);
+  }, [keys, selectedModel]);
 
   // --- TOOL ENGINE ---
 
@@ -425,6 +681,151 @@ export default function App() {
     );
   };
 
+
+  // ════════════════════════════════════════════════════════
+  //  AGENT TAB COMPONENT
+  // ════════════════════════════════════════════════════════
+  const AgentTab = () => {
+    const QUICK = [
+      '🔍 ابحث عن آخر أخبار الذكاء الاصطناعي وقدم ملخصاً',
+      '🐛 شخّص سبب فشل بناء APK في GitHub Actions',
+      '📊 احسب: إذا عندي 7 مفاتيح API تتناوب، كم طلب أقصى في الدقيقة؟',
+      '🎨 ولّد صورة: مدينة مستقبلية بتصميم Nebula عربية الطراز',
+      '🔧 ابنِ تطبيق React Native بسيط لقائمة المهام',
+    ];
+
+    const stepColor = {
+      goal: '#8b5cf6', thinking: '#3b82f6', thought: '#6366f1',
+      tool_call: '#f59e0b', observation: '#14b8a6', image: '#ec4899',
+      done: '#22c55e', error: '#ef4444',
+    };
+
+    const stepIcon = {
+      goal: 'flag', thinking: 'ellipsis-horizontal', thought: 'bulb',
+      tool_call: 'construct', observation: 'eye', image: 'image',
+      done: 'checkmark-circle', error: 'close-circle',
+    };
+
+    return (
+      <View style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 160 }}>
+
+          {/* Header Card */}
+          <View style={agentStyles.headerCard}>
+            <LinearGradient colors={['rgba(139,92,246,0.3)','rgba(59,130,246,0.15)']} style={StyleSheet.absoluteFill} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <View style={agentStyles.agentBadge}>
+                <Text style={{ fontSize: 20 }}>🤖</Text>
+              </View>
+              <View style={{ marginLeft: 12 }}>
+                <Text style={agentStyles.agentTitle}>Autonomous Agent</Text>
+                <Text style={agentStyles.agentSub}>ReAct Loop · 10 أدوات · ذاكرة دائمة</Text>
+              </View>
+              {agentRunning && <ActivityIndicator color="#8b5cf6" style={{ marginLeft: 'auto' }} />}
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {['search_web','fetch_url','calculate','generate_image','build_app','push_github','fix_error','read_memory'].map(t => (
+                <View key={t} style={agentStyles.toolBadge}>
+                  <Text style={agentStyles.toolBadgeText}>{t}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Quick Tasks */}
+          {agentSteps.length === 0 && (
+            <View style={{ marginBottom: 16 }}>
+              <Text style={agentStyles.sectionLabel}>⚡ مهام سريعة</Text>
+              {QUICK.map((q, i) => (
+                <TouchableOpacity key={i} style={agentStyles.quickCard}
+                  onPress={() => setAgentGoal(q)} activeOpacity={0.7}>
+                  <Text style={agentStyles.quickText}>{q}</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#8b5cf6" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {/* Steps Display */}
+          {agentSteps.map((step) => (
+            <View key={step.id} style={[agentStyles.stepCard, { borderLeftColor: stepColor[step.type] || '#fff' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                <Ionicons
+                  name={stepIcon[step.type] || 'information-circle'}
+                  size={18}
+                  color={stepColor[step.type] || '#fff'}
+                  style={{ marginRight: 8, marginTop: 2 }}
+                />
+                <View style={{ flex: 1 }}>
+                  {step.imageUrl ? (
+                    <>
+                      <Text style={agentStyles.stepText}>{step.text.replace(step.imageUrl,'').trim() || '🎨 صورة منتجة:'}</Text>
+                      <Image source={{ uri: step.imageUrl }} style={agentStyles.stepImage} resizeMode="cover" />
+                    </>
+                  ) : (
+                    <Text style={[agentStyles.stepText, step.type === 'thought' && { fontStyle: 'italic', color: '#a5b4fc' }]}>
+                      {step.text}
+                    </Text>
+                  )}
+                  <Text style={agentStyles.stepTs}>{step.ts}</Text>
+                </View>
+              </View>
+            </View>
+          ))}
+
+          {/* History */}
+          {agentHistory.length > 0 && agentSteps.length === 0 && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={agentStyles.sectionLabel}>📜 المهام السابقة</Text>
+              {agentHistory.slice(-5).reverse().map((h, i) => (
+                <TouchableOpacity key={i} style={agentStyles.historyCard}
+                  onPress={() => setAgentGoal(h.goal)} activeOpacity={0.8}>
+                  <Text style={{ color: '#c4b5fd', fontSize: 13 }} numberOfLines={1}>{h.goal}</Text>
+                  <Text style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }} numberOfLines={2}>{h.answer?.slice(0,100)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+        </ScrollView>
+
+        {/* Goal Input */}
+        <BlurView intensity={80} tint="dark" style={agentStyles.inputArea}>
+          <LinearGradient colors={['rgba(139,92,246,0.1)','transparent']} style={StyleSheet.absoluteFill} />
+          {agentSteps.length > 0 && (
+            <TouchableOpacity style={agentStyles.clearBtn} onPress={() => setAgentSteps([])}>
+              <Ionicons name="trash-outline" size={18} color="#94a3b8" />
+              <Text style={{ color: '#94a3b8', fontSize: 12, marginLeft: 4 }}>مسح</Text>
+            </TouchableOpacity>
+          )}
+          <View style={agentStyles.inputRow}>
+            <TextInput
+              style={agentStyles.goalInput}
+              placeholder="اكتب مهمتك… سأخطط وأنفذها تلقائياً 🤖"
+              placeholderTextColor="#4a5568"
+              value={agentGoal}
+              onChangeText={setAgentGoal}
+              multiline
+              editable={!agentRunning}
+              onSubmitEditing={runAgent}
+            />
+            <TouchableOpacity
+              style={[agentStyles.runBtn, agentRunning && { opacity: 0.5 }]}
+              onPress={agentRunning ? null : runAgent}
+              activeOpacity={0.8}
+            >
+              <LinearGradient colors={['#8b5cf6','#3b82f6']} style={agentStyles.runBtnGrad}>
+                {agentRunning
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name="play" size={22} color="#fff" />}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </BlurView>
+      </View>
+    );
+  };
+
   const TabButton = ({ name, icon }) => (
     <TouchableOpacity 
       style={styles.tabItem} 
@@ -618,6 +1019,8 @@ export default function App() {
             </View>
           )}
 
+          {activeTab === 'Agent' && <AgentTab />}
+
           {activeTab === 'Vault' && (
              <View style={styles.tabContent}>
                 <Text style={styles.cardLabel}>Encrypted Vault</Text>
@@ -649,6 +1052,7 @@ export default function App() {
         <TabButton name="Create" icon="brush" />
         <TabButton name="Build" icon="code-working" />
         <TabButton name="Vault" icon="lock-closed" />
+        <TabButton name="Agent" icon="hardware-chip" />
       </BlurView>
 
       {/* VAULT MODAL */}
@@ -670,6 +1074,57 @@ export default function App() {
     </SafeAreaView>
   );
 }
+
+
+  // ── AGENT STYLES ──────────────────────────────────────────
+  const agentStyles = StyleSheet.create({
+    headerCard: {
+      borderRadius: 18, padding: 16, marginBottom: 16, overflow: 'hidden',
+      borderWidth: 1, borderColor: 'rgba(139,92,246,0.3)',
+    },
+    agentBadge: {
+      width: 48, height: 48, borderRadius: 14, backgroundColor: 'rgba(139,92,246,0.2)',
+      alignItems: 'center', justifyContent: 'center',
+    },
+    agentTitle: { color: '#fff', fontSize: 17, fontWeight: '700', letterSpacing: 0.5 },
+    agentSub: { color: '#8b5cf6', fontSize: 12, marginTop: 2 },
+    toolBadge: {
+      backgroundColor: 'rgba(139,92,246,0.15)', borderRadius: 8, paddingHorizontal: 8,
+      paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(139,92,246,0.25)',
+    },
+    toolBadgeText: { color: '#a78bfa', fontSize: 11, fontFamily: Platform.OS==='android'?'monospace':'Menlo' },
+    sectionLabel: { color: '#94a3b8', fontSize: 13, fontWeight: '600', marginBottom: 8, letterSpacing: 0.5 },
+    quickCard: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      backgroundColor: 'rgba(30,30,50,0.8)', borderRadius: 14, padding: 14, marginBottom: 8,
+      borderWidth: 1, borderColor: 'rgba(139,92,246,0.15)',
+    },
+    quickText: { color: '#e2e8f0', fontSize: 13, flex: 1, marginRight: 8 },
+    stepCard: {
+      backgroundColor: 'rgba(15,15,25,0.9)', borderRadius: 12, padding: 12, marginBottom: 8,
+      borderLeftWidth: 3,
+    },
+    stepText: { color: '#e2e8f0', fontSize: 13, lineHeight: 20 },
+    stepTs: { color: '#4a5568', fontSize: 10, marginTop: 4 },
+    stepImage: { width: '100%', height: 240, borderRadius: 10, marginTop: 8 },
+    historyCard: {
+      backgroundColor: 'rgba(20,20,35,0.8)', borderRadius: 12, padding: 12, marginBottom: 6,
+      borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)',
+    },
+    inputArea: {
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      padding: 12, borderTopWidth: 1, borderTopColor: 'rgba(139,92,246,0.2)',
+    },
+    clearBtn: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, alignSelf: 'flex-end' },
+    inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+    goalInput: {
+      flex: 1, backgroundColor: 'rgba(30,30,50,0.9)', borderRadius: 16, padding: 12,
+      color: '#fff', fontSize: 14, maxHeight: 100, borderWidth: 1,
+      borderColor: 'rgba(139,92,246,0.3)',
+    },
+    runBtn: { width: 50, height: 50 },
+    runBtnGrad: { flex: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  });
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: NEBULA_THEME.background },
