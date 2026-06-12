@@ -46,48 +46,25 @@ jobs:
           EXPO_PUBLIC_GROQ_KEY_6: ${{ secrets.GROQ_KEY_6 }}
           EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
 
-      - name: Create Gradle init script (global Kotlin suppress)
+      - name: Fix Gradle properties
         run: |
-          mkdir -p ~/.gradle/init.d
-
-          echo "allprojects {" > ~/.gradle/init.d/compose-suppress.gradle
-          echo "  afterEvaluate { proj ->" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "    proj.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "      kotlinOptions {" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "        def suppress = '-P'" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "        def flag = 'plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.24'" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "        if (!freeCompilerArgs.contains(flag)) {" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "          freeCompilerArgs = freeCompilerArgs + [suppress, flag]" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "        }" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "      }" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "    }" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "  }" >> ~/.gradle/init.d/compose-suppress.gradle
-          echo "}" >> ~/.gradle/init.d/compose-suppress.gradle
-
-          echo "=== Gradle init script contents ==="
-          cat ~/.gradle/init.d/compose-suppress.gradle
-
-      - name: Fix Kotlin and Gradle properties
-        run: |
+          chmod +x android/gradlew
+          # Remove any conflicting kotlin version entries first
           sed -i '/android\.kotlinVersion/d' android/gradle.properties
           sed -i '/kotlin\.version/d' android/gradle.properties
-          printf '\nandroid.kotlinVersion=1.9.24\n' >> android/gradle.properties
-          printf 'kotlin.version=1.9.24\n' >> android/gradle.properties
-          printf 'android.suppressUnsupportedCompileSdk=35\n' >> android/gradle.properties
-          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\n' >> android/gradle.properties
+          # Add stable settings
+          printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\n' >> android/gradle.properties
           printf 'org.gradle.daemon=false\n' >> android/gradle.properties
           printf 'org.gradle.parallel=false\n' >> android/gradle.properties
           printf 'org.gradle.configureondemand=false\n' >> android/gradle.properties
-          chmod +x android/gradlew
-          echo "=== gradle.properties kotlin lines ==="
-          grep -E "kotlin" android/gradle.properties
+          printf 'android.suppressUnsupportedCompileSdk=35\n' >> android/gradle.properties
+          echo "=== gradle.properties ==="
+          cat android/gradle.properties
 
       - name: Build Debug APK
         working-directory: android
         run: |
           ./gradlew assembleDebug \
-            -Pkotlin.version=1.9.24 \
-            -Pandroid.kotlinVersion=1.9.24 \
             --no-daemon \
             -x lint \
             --stacktrace \
@@ -144,7 +121,7 @@ jobs:
         with:
           tag_name: v${{ steps.ver.outputs.VER }}
           name: "AI Studio v2 - ${{ steps.ver.outputs.VER }}"
-          body: "AI Studio v2 - Autonomous Agent + 10 tools + Llama 4 Maverick + DeepSeek R1 + Vision 90B + RSA-4096 signed"
+          body: "AI Studio v2 - Autonomous Agent + Llama 4 Maverick + DeepSeek R1 + Vision 90B + RSA-4096 signed"
           files: ai-studio-signed.apk
           draft: false
           prerelease: false
