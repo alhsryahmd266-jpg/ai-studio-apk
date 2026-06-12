@@ -328,7 +328,7 @@ export default function App() {
 
   // Chat
   const [msgs, setMsgs] = useState([
-    { id: '0', role: 'assistant', content: '🌌 أهلاً بك في NEBULA STUDIO PRO v3.0\n\n🌐 مرتبط بسيرفر NEBULA الأصلي\n\nقادر على:\n• تصفح الإنترنت بنفسي ⚡\n• تحليل الصور والتفكير البصري\n• كتابة وتنفيذ الكود\n• 24 أداة + وكيل ذكاء اصطناعي كامل\n\nما الذي تريده اليوم؟', ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+    { id: '0', role: 'assistant', content: '🌌 أهلاً بك في NEBULA STUDIO PRO v3.0\n\n🌐 ✅ متصل تلقائياً بسيرفر NEBULA\n\nقادر على:\n• تصفح الإنترنت بنفسي ⚡\n• تحليل الصور والتفكير البصري\n• كتابة وتنفيذ الكود\n• 24 أداة + وكيل ذكاء اصطناعي كامل\n\nما الذي تريده اليوم؟', ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -379,7 +379,7 @@ export default function App() {
         GITHUB: await SecureStore.getItemAsync('GITHUB') || process.env.EXPO_PUBLIC_GITHUB_TOKEN || '',
         JINA: await SecureStore.getItemAsync('JINA') || '',
         GROQ_OVR: await SecureStore.getItemAsync('GROQ_OVR') || '',
-        SERVER: await SecureStore.getItemAsync('SERVER_URL') || process.env.EXPO_PUBLIC_SERVER_URL || '',
+        SERVER: await SecureStore.getItemAsync('SERVER_URL') || process.env.EXPO_PUBLIC_SERVER_URL || 'https://19dd6a57-88ed-4ace-84eb-807643506cbd-00-27aa4z2ucs51c.kirk.replit.dev',
       };
       setKeys(k);
     } catch {}
