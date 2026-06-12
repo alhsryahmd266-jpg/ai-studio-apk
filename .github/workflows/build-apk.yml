@@ -57,6 +57,7 @@ jobs:
           EXPO_PUBLIC_GROQ_KEY_6: ${{ secrets.GROQ_KEY_6 }}
           EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
           EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
+          EXPO_PUBLIC_SERVER_URL: https://19dd6a57-88ed-4ace-84eb-807643506cbd-00-27aa4z2ucs51c.kirk.replit.dev
 
       - name: Fix Gradle properties
         run: |
@@ -93,6 +94,7 @@ jobs:
           EXPO_PUBLIC_GROQ_KEY_6: ${{ secrets.GROQ_KEY_6 }}
           EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
           EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
+          EXPO_PUBLIC_SERVER_URL: https://19dd6a57-88ed-4ace-84eb-807643506cbd-00-27aa4z2ucs51c.kirk.replit.dev
 
       - name: Build Debug APK
         working-directory: android
@@ -151,9 +153,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.VER }}
-          name: "🌌 NEBULA STUDIO PRO v${{ steps.ver.outputs.VER }}"
+          name: "🌌 NEBULA STUDIO PRO v3.0-${{ steps.ver.outputs.VER }}"
           body: |
-            ## 🌌 NEBULA STUDIO PRO — AI Agent Mobile App
+            ## 🌌 NEBULA STUDIO PRO v3.0 — AI Agent Mobile App
+
+            ### 🌐 NEBULA Server
+            التطبيق متصل تلقائياً بسيرفر NEBULA الدائم
+            لا تحتاج أي مفاتيح — الوكيل يعمل من السيرفر مباشرةً
+
 
             ### الميزات / Features
             - 🤖 **Autonomous Agent** — ReAct Loop · 24 أداة · ذاكرة دائمة
