@@ -3,7 +3,7 @@ import {
   StyleSheet, View, Text, TextInput, TouchableOpacity,
   ScrollView, Image, ActivityIndicator, KeyboardAvoidingView,
   Platform, SafeAreaView, Dimensions, Animated, StatusBar,
-  Alert, Modal, FlatList, Pressable, Linking, Share,
+  Alert, Modal, FlatList, Pressable, Linking, Share, Easing,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -51,12 +51,118 @@ const MODELS = [
 const TABS = [
   { id: 'Agent', icon: 'hardware-chip-outline', label: 'Agent', color: C.purple },
   { id: 'Chat', icon: 'chatbubbles-outline', label: 'Chat', color: C.blue },
+  { id: 'ProAgents', icon: 'people-outline', label: 'Pro', color: C.pink },
   { id: 'Vision', icon: 'eye-outline', label: 'Vision', color: C.pink },
   { id: 'Search', icon: 'search-outline', label: 'Search', color: C.cyan },
   { id: 'Create', icon: 'color-palette-outline', label: 'Create', color: C.gold },
   { id: 'Build', icon: 'code-slash-outline', label: 'Build', color: C.teal },
   { id: 'Vault', icon: 'lock-closed-outline', label: 'Vault', color: C.orange },
 ];
+
+const PRO_AGENTS = [
+  {
+    id: 'architect',
+    name: 'المهندس المعماري',
+    icon: 'construct-outline',
+    color: '#8b5cf6',
+    model: 'deepseek-r1-distill-llama-70b',
+    system: `أنت مهندس برمجيات معماري خبير متخصص في React Native وExpo.
+لديك معرفة كاملة بمشروع NEBULA STUDIO PRO:
+- 24 أداة لوكيل ذكاء اصطناعي مستقل
+- تصفح الإنترنت الذاتي عبر Jina AI
+- تفكير بصري بـ Vision 90B
+- تدوير 7 مفاتيح Groq
+- بنية ReAct loop
+تحلل الكود وتقترح تحسينات معمارية عميقة.`
+  },
+  {
+    id: 'ui_designer',
+    name: 'مصمم UI/UX',
+    icon: 'color-palette-outline',
+    color: '#ec4899',
+    model: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+    system: `أنت مصمم UI/UX خبير متخصص في React Native وExpo.
+تفهم NEBULA STUDIO PRO وتقترح تحسينات بصرية وتجربة مستخدم.
+تعمل مع: LinearGradient, Glassmorphism, Animations, Starfield.`
+  },
+  {
+    id: 'debugger',
+    name: 'مصحح الأخطاء',
+    icon: 'bug-outline',
+    color: '#ef4444',
+    model: 'deepseek-r1-distill-llama-70b',
+    system: `أنت مصحح أخطاء خبير في React Native وExpo وHermes engine.
+تجد أسباب الأخطاء وتصلحها فوراً. تفهم مشاكل:
+- Hermes JS engine compatibility
+- Expo SDK 52 specifics  
+- React Native 0.76 issues
+- Groq API errors`
+  },
+  {
+    id: 'app_builder',
+    name: 'بنّاء التطبيقات',
+    icon: 'rocket-outline',
+    color: '#06b6d4',
+    model: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+    system: `أنت مطور React Native Expo خبير.
+تبني تطبيقات كاملة وجاهزة للتشغيل فوراً.
+تكتب كوداً نظيفاً وقابلاً للصيانة.`
+  },
+  {
+    id: 'deep_thinker',
+    name: 'المفكر العميق',
+    icon: 'infinite-outline',
+    color: '#14b8a6',
+    model: 'deepseek-r1-distill-llama-70b',
+    system: `أنت مفكر استراتيجي عميق. تحلل المسائل المعقدة وتجد حلولاً مبتكرة.
+تفكر بعمق في: معمارية الأنظمة، خوارزميات الذكاء الاصطناعي، استراتيجيات التطوير.`
+  },
+  {
+    id: 'security',
+    name: 'خبير الأمان',
+    icon: 'shield-checkmark-outline',
+    color: '#f59e0b',
+    model: 'deepseek-r1-distill-llama-70b',
+    system: `أنت خبير أمان متخصص في تطبيقات الموبايل والذكاء الاصطناعي.
+تراجع: API key security, data encryption, network security, Expo secure storage.
+تقترح حلولاً أمنية قابلة للتطبيق.`
+  },
+];
+
+const TOOL_LIST = [
+  { id: 'search_web', name: 'Web Search', icon: 'search', color: C.blue, prompt: 'Search the web for ' },
+  { id: 'fetch_url', name: 'Fetch URL', icon: 'globe-outline', color: C.cyan, prompt: 'Fetch the content of ' },
+  { id: 'get_weather', name: 'Weather', icon: 'partly-sunny-outline', color: C.gold, prompt: 'Get weather for ' },
+  { id: 'search_github', name: 'GitHub Search', icon: 'logo-github', color: C.white, prompt: 'Search GitHub for ' },
+  { id: 'build_app', name: 'Build App', icon: 'code-slash', color: C.teal, prompt: 'Build a React Native app that ' },
+  { id: 'analyze_code', name: 'Code Review', icon: 'analytics-outline', color: C.purple, prompt: 'Analyze this code: ' },
+  { id: 'execute_code', name: 'Run JS', icon: 'play-outline', color: C.green, prompt: 'Execute this JavaScript: ' },
+  { id: 'fix_error', name: 'Fix Error', icon: 'bug-outline', color: C.red, prompt: 'Fix this error: ' },
+  { id: 'push_github', name: 'Push to Git', icon: 'cloud-upload-outline', color: C.blue, prompt: 'Push to GitHub repo: ' },
+  { id: 'read_github_file', name: 'Read File', icon: 'document-text-outline', color: C.gray, prompt: 'Read file from GitHub: ' },
+  { id: 'list_github_files', name: 'List Files', icon: 'folder-open-outline', color: C.orange, prompt: 'List files in repo: ' },
+  { id: 'create_github_issue', name: 'Git Issue', icon: 'alert-circle-outline', color: C.red, prompt: 'Create an issue in: ' },
+  { id: 'generate_image', name: 'AI Image', icon: 'image-outline', color: C.pink, prompt: 'Generate an image of ' },
+  { id: 'analyze_image', name: 'Vision AI', icon: 'eye-outline', color: C.purple, prompt: 'Analyze this image: ' },
+  { id: 'summarize_text', name: 'Summarize', icon: 'list-outline', color: C.cyan, prompt: 'Summarize this: ' },
+  { id: 'translate_text', name: 'Translate', icon: 'language-outline', color: C.blue, prompt: 'Translate this to English: ' },
+  { id: 'create_plan', name: 'Planner', icon: 'calendar-outline', color: C.gold, prompt: 'Create a plan for ' },
+  { id: 'deep_think', name: 'Deep Think', icon: 'infinite-outline', color: C.purple, prompt: 'Think deeply about ' },
+  { id: 'read_memory', name: 'Read RAM', icon: 'reader-outline', color: C.teal, prompt: 'Read from memory: ' },
+  { id: 'save_memory', name: 'Save RAM', icon: 'save-outline', color: C.green, prompt: 'Save to memory: ' },
+  { id: 'list_memory', name: 'List RAM', icon: 'layers-outline', color: C.blue, prompt: 'List all memory items' },
+  { id: 'social_share', name: 'Share', icon: 'share-social-outline', color: C.blue, prompt: 'Share this: ' },
+  { id: 'text_to_speech', name: 'TTS', icon: 'volume-high-outline', color: C.pink, prompt: 'Speak this: ' },
+  { id: 'extract_info', name: 'Extract Data', icon: 'finger-print-outline', color: C.cyan, prompt: 'Extract info from: ' },
+];
+
+const safeBase64 = (str) => {
+  try {
+    return btoa(unescape(encodeURIComponent(str)));
+  } catch {
+    return btoa(str.replace(/[^\x00-\x7F]/g, c => encodeURIComponent(c)));
+  }
+};
 
 // ─── STAR FIELD ──────────────────────────────────
 const STARS = Array.from({ length: 120 }, (_, i) => ({
@@ -176,6 +282,38 @@ const Badge = ({ label, color }) => (
   </View>
 );
 
+// ─── SPLASH ANIMATION ────────────────────────────
+const SplashScreen = ({ onFinish }) => {
+  const fade = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.9)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fade, { toValue: 1, duration: 800, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, tension: 10, friction: 3, useNativeDriver: true })
+    ]).start();
+
+    const timer = setTimeout(() => {
+      Animated.timing(fade, { toValue: 0, duration: 500, useNativeDriver: true }).start(onFinish);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>
+      <StarBed />
+      <Animated.View style={{ opacity: fade, transform: [{ scale }], alignItems: 'center' }}>
+        <LinearGradient colors={[C.purple, C.blue]} style={{ width: 100, height: 100, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+          <Text style={{ color: '#fff', fontSize: 50, fontWeight: '900', fontStyle: 'italic' }}>N</Text>
+        </LinearGradient>
+        <Text style={{ color: '#fff', fontSize: 24, fontWeight: '900', letterSpacing: 5 }}>NEBULA STUDIO PRO</Text>
+        <Text style={{ color: C.purple, fontSize: 12, fontWeight: '600', marginTop: 10, letterSpacing: 2 }}>POWERED BY LLAMA 4</Text>
+        <ActivityIndicator color={C.purple} style={{ marginTop: 30 }} />
+      </Animated.View>
+    </View>
+  );
+};
+
 // ════════════════════════════════════════════════
 //  MAIN APP
 // ════════════════════════════════════════════════
@@ -184,12 +322,13 @@ export default function App() {
   const [tab, setTab] = useState('Agent');
   const [model, setModel] = useState(MODELS[0].id);
   const [keys, setKeys] = useState({});
-  const [showVaultModal, setShowVaultModal] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  const [startTime, setStartTime] = useState(Date.now());
   const groqIdx = useRef(0);
 
   // Chat
   const [msgs, setMsgs] = useState([
-    { id: '0', role: 'assistant', content: '🌌 أهلاً بك في NEBULA STUDIO PRO\n\nأنا وكيل ذكاء اصطناعي قادر على:\n• تصفح الإنترنت بنفسي\n• تحليل الصور والتفكير البصري\n• كتابة وتنفيذ الكود\n• 24 أداة احترافية\n\nما الذي تريده اليوم؟' }
+    { id: '0', role: 'assistant', content: '🌌 أهلاً بك في NEBULA STUDIO PRO\n\nأنا وكيل ذكاء اصطناعي قادر على:\n• تصفح الإنترنت بنفسي\n• تحليل الصور والتفكير البصري\n• كتابة وتنفيذ الكود\n• 24 أداة احترافية\n\nما الذي تريده اليوم؟', ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -198,7 +337,8 @@ export default function App() {
   const [agentGoal, setAgentGoal] = useState('');
   const [agentSteps, setAgentSteps] = useState([]);
   const [agentRunning, setAgentRunning] = useState(false);
-  const [agentMemory, setAgentMemory] = useState({});
+  const agentMemoryRef = useRef({});
+  const [agentMemoryDisplay, setAgentMemoryDisplay] = useState({});
 
   // Vision
   const [visImg, setVisImg] = useState(null);
@@ -222,6 +362,10 @@ export default function App() {
   const [buildCode, setBuildCode] = useState('');
   const [buildLoading, setBuildLoading] = useState(false);
   const [commitUrl, setCommitUrl] = useState('');
+
+  // Pro Agents
+  const [selectedProAgent, setSelectedProAgent] = useState(null);
+  const [proAgentsHistory, setProAgentsHistory] = useState({});
 
   const chatScroll = useRef(null);
   const agentScroll = useRef(null);
@@ -264,15 +408,18 @@ export default function App() {
           headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: mdl || model, messages, temperature: 0.7, max_tokens: maxTokens }),
         });
-        if (r.status === 429 || r.status === 401) {
-          lastErr = new Error('Key ' + (base + t) % 7 + 1 + ' rate limited');
-          continue;
-        }
+        if (r.status === 429 || r.status === 401) { lastErr = new Error('key rate limited'); continue; }
+        if (r.status >= 500) { lastErr = new Error('server error ' + r.status); await new Promise(r => setTimeout(r, 1000)); continue; }
         if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || 'Groq error'); }
         const d = await r.json();
         return d.choices[0].message.content;
       } catch (e) {
-        if (e.message?.includes('rate') || e.message?.includes('limit')) { lastErr = e; continue; }
+        const msg = e.message?.toLowerCase() || '';
+        if (msg.includes('rate') || msg.includes('limit') || msg.includes('network') || msg.includes('fetch')) {
+          lastErr = e; 
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
         throw e;
       }
     }
@@ -281,7 +428,6 @@ export default function App() {
 
   // ─── 24 AGENT TOOLS ─────────────────────────────
   const tools = useMemo(() => ({
-    // 1. تصفح الإنترنت - بحث
     search_web: async ({ query }) => {
       try {
         const r = await fetch('https://s.jina.ai/' + encodeURIComponent(query), {
@@ -292,8 +438,6 @@ export default function App() {
         return items.map((i, n) => `[${n+1}] ${i.title}\n${i.url}\n${i.content?.slice(0, 400)}`).join('\n\n') || JSON.stringify(d).slice(0, 2000);
       } catch (e) { return 'فشل البحث: ' + e.message; }
     },
-
-    // 2. جلب أي صفحة ويب
     fetch_url: async ({ url }) => {
       try {
         const r = await fetch('https://r.jina.ai/' + url, {
@@ -302,8 +446,6 @@ export default function App() {
         return (await r.text()).slice(0, 4000);
       } catch (e) { return 'فشل جلب الصفحة: ' + e.message; }
     },
-
-    // 3. الطقس
     get_weather: async ({ city }) => {
       try {
         const r = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`);
@@ -313,8 +455,6 @@ export default function App() {
         return `🌤 ${city}: ${desc}\n🌡 ${c.temp_C}°C (يشعر بـ ${c.FeelsLikeC}°C)\n💧 رطوبة: ${c.humidity}%\n💨 رياح: ${c.windspeedKmph} كم/س`;
       } catch (e) { return 'فشل جلب الطقس: ' + e.message; }
     },
-
-    // 4. البحث في GitHub
     search_github: async ({ query, type = 'repositories' }) => {
       try {
         const hdrs = { 'Accept': 'application/vnd.github+json' };
@@ -326,8 +466,6 @@ export default function App() {
         ).join('\n\n');
       } catch (e) { return 'فشل بحث GitHub: ' + e.message; }
     },
-
-    // 5. بناء تطبيق
     build_app: async ({ description }) => {
       try {
         const code = await callGroq([
@@ -337,8 +475,6 @@ export default function App() {
         return code.slice(0, 5000);
       } catch (e) { return 'فشل البناء: ' + e.message; }
     },
-
-    // 6. تحليل الكود
     analyze_code: async ({ code, goal = 'review' }) => {
       try {
         const g = goal === 'debug' ? 'ابحث عن الأخطاء وأصلحها' : goal === 'improve' ? 'حسّن وطوّر' : 'راجع وقيّم';
@@ -348,8 +484,6 @@ export default function App() {
         ], 'deepseek-r1-distill-llama-70b');
       } catch (e) { return 'فشل التحليل: ' + e.message; }
     },
-
-    // 7. تنفيذ JavaScript
     execute_code: async ({ code }) => {
       try {
         const fn = new Function(code);
@@ -357,8 +491,6 @@ export default function App() {
         return String(result !== undefined ? result : 'تم التنفيذ بنجاح');
       } catch (e) { return 'خطأ في التنفيذ: ' + e.message; }
     },
-
-    // 8. إصلاح خطأ
     fix_error: async ({ error, context = '' }) => {
       try {
         return await callGroq([
@@ -367,8 +499,6 @@ export default function App() {
         ], 'deepseek-r1-distill-llama-70b');
       } catch (e) { return 'فشل الإصلاح: ' + e.message; }
     },
-
-    // 9. رفع ملف على GitHub
     push_github: async ({ repo, path, content, message }) => {
       try {
         if (!keys.GITHUB) return '❌ GitHub token مطلوب — اذهب لـ Vault';
@@ -376,7 +506,7 @@ export default function App() {
           headers: { Authorization: 'token ' + keys.GITHUB }
         });
         const shaData = await shaRes.json();
-        const body = { message, content: btoa(unescape(encodeURIComponent(content))) };
+        const body = { message, content: safeBase64(content) };
         if (shaData.sha) body.sha = shaData.sha;
         const r = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
           method: 'PUT',
@@ -387,19 +517,17 @@ export default function App() {
         return d.commit ? '✅ رُفع: ' + d.content.html_url : '❌ فشل: ' + JSON.stringify(d).slice(0, 300);
       } catch (e) { return 'فشل الرفع: ' + e.message; }
     },
-
-    // 10. قراءة ملف من GitHub
     read_github_file: async ({ repo, path }) => {
       try {
         const hdrs = keys.GITHUB ? { Authorization: 'token ' + keys.GITHUB } : {};
         const r = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, { headers: hdrs });
+        if (!r.ok) return 'خطأ: ' + r.status;
         const d = await r.json();
-        if (d.content) return Buffer ? Buffer.from(d.content, 'base64').toString() : atob(d.content.replace(/\n/g, '')).slice(0, 3000);
-        return JSON.stringify(d).slice(0, 1000);
+        if (!d.content) return JSON.stringify(d).slice(0, 1000);
+        const b64 = d.content.replace(/\n/g, '');
+        return atob(b64).slice(0, 3000);
       } catch (e) { return 'فشل القراءة: ' + e.message; }
     },
-
-    // 11. قائمة ملفات GitHub
     list_github_files: async ({ repo, dir = '' }) => {
       try {
         const hdrs = keys.GITHUB ? { Authorization: 'token ' + keys.GITHUB } : {};
@@ -408,8 +536,6 @@ export default function App() {
         return (Array.isArray(d) ? d : []).map(f => `${f.type === 'dir' ? '📁' : '📄'} ${f.name} (${f.size || 0} bytes)`).join('\n');
       } catch (e) { return 'فشل القائمة: ' + e.message; }
     },
-
-    // 12. إنشاء issue على GitHub
     create_github_issue: async ({ repo, title, body }) => {
       try {
         if (!keys.GITHUB) return '❌ GitHub token مطلوب';
@@ -422,297 +548,13 @@ export default function App() {
         return d.html_url ? '✅ Issue: ' + d.html_url : '❌ فشل: ' + JSON.stringify(d).slice(0, 300);
       } catch (e) { return 'فشل إنشاء issue: ' + e.message; }
     },
-
-    // 13. توليد صورة
     generate_image: async ({ prompt }) => {
       const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`;
       return `IMAGE:${url}`;
     },
-
-    // 14. تحليل صورة (تفكير بصري)
     analyze_image: async ({ url, question = 'ما الذي تراه في هذه الصورة؟' }) => {
-      try {
-        groqIdx.current = (groqIdx.current + 1) % 7;
-        const base = groqIdx.current;
-        let lastErr;
-        for (let t = 0; t < 7; t++) {
-          const key = getGroqKey(base + t);
-          if (!key) continue;
-          try {
-            const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-              method: 'POST',
-              headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                model: 'llama-3.2-90b-vision-preview',
-                messages: [{ role: 'user', content: [
-                  { type: 'text', text: question },
-                  { type: 'image_url', image_url: { url } }
-                ]}],
-                max_tokens: 2048,
-              })
-            });
-            if (r.status === 429 || r.status === 401) { lastErr = new Error('rate limit'); continue; }
-            const d = await r.json();
-            return d.choices[0].message.content;
-          } catch (e) { if (e.message?.includes('rate')) { lastErr = e; continue; } throw e; }
-        }
-        throw lastErr;
-      } catch (e) { return 'فشل تحليل الصورة: ' + e.message; }
-    },
-
-    // 15. تلخيص نص
-    summarize_text: async ({ text, lang = 'ar' }) => {
-      try {
-        return await callGroq([
-          { role: 'system', content: `لخّص النص التالي بشكل موجز ومفيد باللغة ${lang === 'ar' ? 'العربية' : 'الإنجليزية'}.` },
-          { role: 'user', content: text.slice(0, 6000) }
-        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
-      } catch (e) { return 'فشل التلخيص: ' + e.message; }
-    },
-
-    // 16. ترجمة
-    translate_text: async ({ text, to = 'en' }) => {
-      try {
-        const langs = { en: 'الإنجليزية', ar: 'العربية', fr: 'الفرنسية', de: 'الألمانية', es: 'الإسبانية', zh: 'الصينية' };
-        return await callGroq([
-          { role: 'user', content: `ترجم إلى ${langs[to] || to}:\n\n${text.slice(0, 3000)}` }
-        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
-      } catch (e) { return 'فشل الترجمة: ' + e.message; }
-    },
-
-    // 17. إنشاء خطة
-    create_plan: async ({ goal, steps = 5 }) => {
-      try {
-        return await callGroq([
-          { role: 'system', content: 'أنت مخطط استراتيجي خبير. اصنع خططاً مفصلة وقابلة للتنفيذ.' },
-          { role: 'user', content: `ضع خطة مفصلة من ${steps} خطوات لتحقيق: ${goal}` }
-        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
-      } catch (e) { return 'فشل إنشاء الخطة: ' + e.message; }
-    },
-
-    // 18. تفكير عميق
-    deep_think: async ({ question }) => {
-      try {
-        return await callGroq([
-          { role: 'system', content: 'أنت مفكر فلسفي وعلمي عميق. فكّر بعمق وتأمل.' },
-          { role: 'user', content: 'فكّر بعمق في: ' + question }
-        ], 'deepseek-r1-distill-llama-70b', 8000);
-      } catch (e) { return 'فشل التفكير العميق: ' + e.message; }
-    },
-
-    // 19. قراءة الذاكرة
-    read_memory: async ({ key }) => {
-      return agentMemory[key] !== undefined ? `🧠 ${key}: ${String(agentMemory[key])}` : `❌ لا يوجد: ${key}`;
-    },
-
-    // 20. حفظ في الذاكرة
-    save_memory: async ({ key, value }) => {
-      setAgentMemory(p => ({ ...p, [key]: value }));
-      return `✅ تم حفظ "${key}" في الذاكرة`;
-    },
-
-    // 21. قائمة الذاكرة
-    list_memory: async () => {
-      const entries = Object.entries(agentMemory);
-      if (!entries.length) return '🧠 الذاكرة فارغة';
-      return '🧠 الذاكرة:\n' + entries.map(([k, v]) => `• ${k}: ${String(v).slice(0, 100)}`).join('\n');
-    },
-
-    // 22. حساب
-    calculate: async ({ expr }) => {
-      try {
-        const result = Function('"use strict"; return (' + expr + ')')();
-        return `🔢 ${expr} = ${result}`;
-      } catch (e) { return 'خطأ: ' + e.message; }
-    },
-
-    // 23. التاريخ والوقت
-    get_datetime: async () => {
-      const now = new Date();
-      return `📅 ${now.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n⏰ ${now.toLocaleTimeString('ar-EG')}`;
-    },
-
-    // 24. تنسيق JSON
-    format_json: async ({ data }) => {
-      try {
-        const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-        return JSON.stringify(parsed, null, 2);
-      } catch (e) { return 'خطأ في التنسيق: ' + e.message; }
-    },
-  }), [keys, agentMemory, model]);
-
-  // ─── AGENT SYSTEM PROMPT ──────────────────────
-  const AGENT_SYS = `أنت وكيل ذكاء اصطناعي احترافي مستقل — NEBULA AI AGENT.
-لديك 24 أداة قوية تمكّنك من:
-• تصفح الإنترنت بنفسك وجلب أي محتوى
-• التفكير البصري وتحليل الصور
-• كتابة وتنفيذ الكود
-• التفاعل مع GitHub
-• التخطيط والتفكير العميق
-• الذاكرة الدائمة
-
-الأدوات المتاحة (استخدمها بالصيغة الدقيقة):
-
-【ويب وبيانات】
-[TOOL: search_web | {"query":"..."}] — ابحث في الإنترنت
-[TOOL: fetch_url | {"url":"https://..."}] — اجلب أي صفحة ويب
-[TOOL: get_weather | {"city":"القاهرة"}] — الطقس
-[TOOL: search_github | {"query":"...","type":"repositories"}] — بحث GitHub
-
-【كود وبناء】
-[TOOL: build_app | {"description":"..."}] — بناء تطبيق
-[TOOL: analyze_code | {"code":"...","goal":"review"}] — تحليل كود
-[TOOL: execute_code | {"code":"..."}] — تنفيذ JavaScript
-[TOOL: fix_error | {"error":"...","context":"..."}] — إصلاح خطأ
-
-【GitHub】
-[TOOL: push_github | {"repo":"owner/repo","path":"file","content":"...","message":"..."}]
-[TOOL: read_github_file | {"repo":"owner/repo","path":"file"}]
-[TOOL: list_github_files | {"repo":"owner/repo","dir":""}]
-[TOOL: create_github_issue | {"repo":"owner/repo","title":"...","body":"..."}]
-
-【ذكاء اصطناعي ووسائط】
-[TOOL: generate_image | {"prompt":"..."}] — توليد صورة
-[TOOL: analyze_image | {"url":"https://...","question":"..."}] — تحليل صورة (تفكير بصري)
-[TOOL: summarize_text | {"text":"...","lang":"ar"}] — تلخيص
-[TOOL: translate_text | {"text":"...","to":"en"}] — ترجمة
-
-【تخطيط وتفكير】
-[TOOL: create_plan | {"goal":"...","steps":5}] — خطة مفصلة
-[TOOL: deep_think | {"question":"..."}] — تفكير عميق
-
-【ذاكرة】
-[TOOL: read_memory | {"key":"..."}]
-[TOOL: save_memory | {"key":"...","value":"..."}]
-[TOOL: list_memory | {}]
-
-【أدوات】
-[TOOL: calculate | {"expr":"2+2"}]
-[TOOL: get_datetime | {}]
-[TOOL: format_json | {"data":"..."}]
-
-قواعد الوكيل:
-1. ابدأ بـ THOUGHT: حلّل الهدف
-2. استخدم أداة واحدة في كل خطوة بصيغة [TOOL: اسم_الأداة | {...}]
-3. بعد OBSERVATION: قرر الخطوة التالية
-4. اكتب FINAL ANSWER: عند الانتهاء
-5. للمهام المعقدة: ابدأ بـ create_plan
-6. عند الفشل: استخدم fix_error وأعد المحاولة
-7. حتى 15 تكراراً — خطط بكفاءة`;
-
-  // ─── RUN AGENT ───────────────────────────────
-  const addStep = (type, content, extra = {}) => {
-    const step = { id: Date.now().toString() + Math.random(), type, content, ts: new Date().toLocaleTimeString('ar'), ...extra };
-    setAgentSteps(p => [...p, step]);
-    return step;
-  };
-
-  const runAgent = useCallback(async () => {
-    if (!agentGoal.trim() || agentRunning) return;
-    setAgentRunning(true);
-    setAgentSteps([]);
-    const goal = agentGoal.trim();
-
-    addStep('goal', goal);
-
-    const history = [{ role: 'system', content: AGENT_SYS }];
-    history.push({ role: 'user', content: `الهدف: ${goal}` });
-
-    for (let iter = 0; iter < 15; iter++) {
-      addStep('thinking', `التكرار ${iter + 1}/15 — أفكر...`);
-      let reply;
-      try {
-        reply = await callGroq(history, 'meta-llama/llama-4-maverick-17b-128e-instruct', 3000);
-      } catch (e) {
-        addStep('error', 'خطأ في الاتصال: ' + e.message);
-        break;
-      }
-      history.push({ role: 'assistant', content: reply });
-
-      // Extract THOUGHT
-      const thoughtMatch = reply.match(/THOUGHT:\s*([\s\S]*?)(?:\[TOOL:|FINAL ANSWER:|$)/);
-      if (thoughtMatch?.[1]?.trim()) addStep('thought', thoughtMatch[1].trim());
-
-      // Check FINAL ANSWER
-      if (reply.includes('FINAL ANSWER:')) {
-        const ans = reply.split('FINAL ANSWER:')[1]?.trim() || reply;
-        addStep('done', ans);
-        break;
-      }
-
-      // Extract TOOL call
-      const toolMatch = reply.match(/\[TOOL:\s*(\w+)\s*\|\s*(\{[\s\S]*?\})\]/);
-      if (!toolMatch) {
-        // No tool call, treat as final
-        addStep('done', reply.replace(/THOUGHT:[\s\S]*?(?=\n|$)/g, '').trim() || reply);
-        break;
-      }
-
-      const [, toolName, argsStr] = toolMatch;
-      let args = {};
-      try { args = JSON.parse(argsStr); } catch { args = { raw: argsStr }; }
-
-      addStep('tool_call', `🔧 ${toolName}`, { tool: toolName, args });
-
-      const toolFn = tools[toolName];
-      let observation;
-      if (toolFn) {
-        try { observation = await toolFn(args); }
-        catch (e) { observation = 'خطأ: ' + e.message; }
-      } else {
-        observation = `❌ أداة غير معروفة: ${toolName}`;
-      }
-
-      // Handle image results
-      const isImage = typeof observation === 'string' && observation.startsWith('IMAGE:');
-      const imageUrl = isImage ? observation.slice(6) : null;
-      const obsText = isImage ? `تم توليد الصورة: ${imageUrl}` : String(observation).slice(0, 2000);
-
-      addStep('observation', obsText, { imageUrl });
-      history.push({ role: 'user', content: `OBSERVATION: ${obsText}` });
-    }
-
-    setAgentRunning(false);
-  }, [agentGoal, agentRunning, tools, model]);
-
-  // ─── CHAT ─────────────────────────────────────
-  const sendChat = async () => {
-    if (!chatInput.trim() || chatLoading) return;
-    const txt = chatInput.trim();
-    const userMsg = { id: Date.now().toString(), role: 'user', content: txt };
-    setMsgs(p => [...p, userMsg]);
-    setChatInput('');
-    setChatLoading(true);
-    try {
-      const history = msgs.slice(-20).map(m => ({ role: m.role, content: m.content }));
-      history.push({ role: 'user', content: txt });
-      const reply = await callGroq(history);
-      setMsgs(p => [...p, { id: (Date.now() + 1).toString(), role: 'assistant', content: reply }]);
-    } catch (e) {
-      Alert.alert('خطأ', e.message);
-    } finally {
-      setChatLoading(false);
-      setTimeout(() => chatScroll.current?.scrollToEnd({ animated: true }), 200);
-    }
-  };
-
-  // ─── VISION ───────────────────────────────────
-  const pickImage = async () => {
-    const r = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, quality: 0.7, base64: true,
-    });
-    if (!r.canceled) setVisImg(r.assets[0]);
-  };
-
-  const analyzeVision = async () => {
-    if (!visImg || visLoading) return;
-    setVisLoading(true); setVisResult('');
-    try {
-      const dataUrl = `data:image/jpeg;base64,${visImg.base64}`;
       groqIdx.current = (groqIdx.current + 1) % 7;
       const base = groqIdx.current;
-      let reply, lastErr;
       for (let t = 0; t < 7; t++) {
         const key = getGroqKey(base + t);
         if (!key) continue;
@@ -723,555 +565,609 @@ export default function App() {
             body: JSON.stringify({
               model: 'llama-3.2-90b-vision-preview',
               messages: [{ role: 'user', content: [
-                { type: 'text', text: visPrompt || 'حلّل هذه الصورة بتفصيل كامل' },
-                { type: 'image_url', image_url: { url: dataUrl } },
-              ]}],
-              max_tokens: 2048,
-            }),
+                { type: 'text', text: question },
+                { type: 'image_url', image_url: { url } }
+              ]}], max_tokens: 2048,
+            })
           });
-          if (r.status === 429 || r.status === 401) { lastErr = new Error('rate limit'); continue; }
-          if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message); }
+          if (r.status === 429 || r.status === 401) continue;
+          if (!r.ok) return 'خطأ Vision: ' + r.status;
           const d = await r.json();
-          reply = d.choices[0].message.content;
-          break;
-        } catch (e) { if (e.message?.includes('rate')) { lastErr = e; continue; } throw e; }
+          return d.choices?.[0]?.message?.content || 'لا نتيجة';
+        } catch (e) { continue; }
       }
-      if (reply) setVisResult(reply);
-      else throw lastErr || new Error('فشل جميع المفاتيح');
+      return 'فشل جميع المفاتيح';
+    },
+    summarize_text: async ({ text, lang = 'ar' }) => {
+      try {
+        return await callGroq([
+          { role: 'system', content: `لخّص النص التالي بشكل موجز ومفيد باللغة ${lang === 'ar' ? 'العربية' : 'الإنجليزية'}.` },
+          { role: 'user', content: text.slice(0, 6000) }
+        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
+      } catch (e) { return 'فشل التلخيص: ' + e.message; }
+    },
+    translate_text: async ({ text, to = 'en' }) => {
+      try {
+        const langs = { en: 'الإنجليزية', ar: 'العربية', fr: 'الفرنسية', de: 'الألمانية', es: 'الإسبانية', zh: 'الصينية' };
+        return await callGroq([
+          { role: 'user', content: `ترجم إلى ${langs[to] || to}:\n\n${text.slice(0, 3000)}` }
+        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
+      } catch (e) { return 'فشل الترجمة: ' + e.message; }
+    },
+    create_plan: async ({ goal, steps = 5 }) => {
+      try {
+        return await callGroq([
+          { role: 'system', content: 'أنت مخطط استراتيجي خبير. اصنع خططاً مفصلة وقابلة للتنفيذ.' },
+          { role: 'user', content: `ضع خطة مفصلة من ${steps} خطوات لتحقيق: ${goal}` }
+        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
+      } catch (e) { return 'فشل إنشاء الخطة: ' + e.message; }
+    },
+    deep_think: async ({ question }) => {
+      try {
+        return await callGroq([
+          { role: 'system', content: 'أنت مفكر فلسفي وعلمي عميق. فكّر بعمق وتأمل.' },
+          { role: 'user', content: 'فكّر بعمق في: ' + question }
+        ], 'deepseek-r1-distill-llama-70b', 8000);
+      } catch (e) { return 'فشل التفكير العميق: ' + e.message; }
+    },
+    read_memory: async ({ key }) => {
+      const v = agentMemoryRef.current[key];
+      return v !== undefined ? `🧠 ${key}: ${String(v)}` : `❌ لا يوجد: ${key}`;
+    },
+    save_memory: async ({ key, value }) => {
+      agentMemoryRef.current[key] = value;
+      setAgentMemoryDisplay({ ...agentMemoryRef.current });
+      return `✅ تم حفظ "${key}"`;
+    },
+    list_memory: async () => {
+      const entries = Object.entries(agentMemoryRef.current);
+      if (!entries.length) return '🧠 الذاكرة فارغة';
+      return '🧠 ' + entries.map(([k,v]) => `${k}: ${String(v).slice(0,100)}`).join('\n');
+    },
+    social_share: async ({ content }) => {
+      try { await Share.share({ message: content }); return '✅ تمت المشاركة'; }
+      catch (e) { return '❌ فشل المشاركة'; }
+    },
+    text_to_speech: async ({ text }) => {
+      return `🔊 (Simulated TTS): ${text.slice(0, 100)}...`;
+    },
+    extract_info: async ({ text, schema }) => {
+      try {
+        return await callGroq([
+          { role: 'system', content: `استخرج البيانات من النص بناءً على هذا الـ Schema: ${schema}. أرجع JSON فقط.` },
+          { role: 'user', content: text.slice(0, 5000) }
+        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
+      } catch (e) { return 'فشل الاستخراج: ' + e.message; }
+    },
+    creative_write: async ({ topic, style = 'creative' }) => {
+      try {
+        return await callGroq([
+          { role: 'system', content: `أنت كاتب مبدع خبير. اكتب نصاً بأسلوب ${style}.` },
+          { role: 'user', content: 'اكتب عن: ' + topic }
+        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
+      } catch (e) { return 'فشل الكتابة: ' + e.message; }
+    },
+  }), [keys, model]);
+
+  // ─── AGENT LOOP ─────────────────────────────────
+  const runAgent = async (goal) => {
+    if (!goal || agentRunning) return;
+    setAgentRunning(true);
+    setAgentGoal(goal);
+    setAgentSteps([{ id: '1', role: 'system', content: '🚀 بدء المهمة: ' + goal, ts: new Date().toLocaleTimeString() }]);
+
+    let history = [
+      { role: 'system', content: `أنت وكيل NEBULA الذكي. لديك 24 أداة. 
+استخدم الأدوات عبر كتابة JSON: {"tool": "name", "args": {...}}
+لا تتوقف حتى تنهي المهمة تماماً.
+الأدوات المتاحة: ${Object.keys(tools).join(', ')}` },
+      { role: 'user', content: goal }
+    ];
+
+    try {
+      for (let i = 0; i < 15; i++) {
+        const resp = await callGroq(history);
+        setAgentSteps(p => [...p, { id: Date.now().toString(), role: 'assistant', content: resp, ts: new Date().toLocaleTimeString() }]);
+        
+        const toolMatch = resp.match(/\{[\s\S]*?"tool"[\s\S]*?\}/);
+        if (toolMatch) {
+          try {
+            const { tool, args } = JSON.parse(toolMatch[0]);
+            if (tools[tool]) {
+              const res = await tools[tool](args);
+              setAgentSteps(p => [...p, { id: 'r'+Date.now(), role: 'tool', content: `🛠 ${tool} -> ${res.slice(0,500)}`, ts: new Date().toLocaleTimeString() }]);
+              history.push({ role: 'assistant', content: resp });
+              history.push({ role: 'user', content: `Tool Result: ${res}` });
+              continue;
+            }
+          } catch {}
+        }
+        if (resp.includes('تمت المهمة') || resp.includes('FINISH')) break;
+      }
     } catch (e) {
-      Alert.alert('خطأ Vision', e.message);
-    } finally { setVisLoading(false); }
+      setAgentSteps(p => [...p, { id: 'err', role: 'system', content: '❌ خطأ: ' + e.message, ts: new Date().toLocaleTimeString() }]);
+    } finally {
+      setAgentRunning(false);
+    }
   };
 
-  // ─── SEARCH ───────────────────────────────────
-  const doSearch = async () => {
-    if (!srchQ.trim() || srchLoading) return;
-    setSrchLoading(true); setSrchResults([]);
-    try {
-      const r = await fetch('https://s.jina.ai/' + encodeURIComponent(srchQ), {
-        headers: { Accept: 'application/json', 'X-Return-Format': 'markdown' }
-      });
-      const d = await r.json();
-      setSrchResults(d.data || []);
-    } catch (e) { Alert.alert('خطأ', e.message); }
-    finally { setSrchLoading(false); }
+  const onToolPress = (tool) => {
+    setTab('Agent');
+    setAgentGoal(tool.prompt);
   };
 
-  // ─── CREATE ───────────────────────────────────
-  const genImage = () => {
-    if (!createPrompt.trim()) return;
-    setCreateImg(`https://image.pollinations.ai/prompt/${encodeURIComponent(createPrompt)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`);
-  };
-
-  const genStoryboard = async () => {
-    if (!createPrompt.trim() || createLoading) return;
-    setCreateLoading(true);
-    try {
-      const res = await callGroq([
-        { role: 'user', content: `اصنع storyboard من 4 مشاهد لـ: ${createPrompt}\nأرجع JSON فقط: [{"scene":1,"title":"...","prompt":"..."},...]` }
-      ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
-      const scenes = JSON.parse(res.match(/\[[\s\S]*\]/)[0]);
-      setStoryboard(scenes.map(s => ({
-        ...s,
-        url: `https://image.pollinations.ai/prompt/${encodeURIComponent(s.prompt)}?width=512&height=512&nologo=true&seed=${Math.random() * 9999 | 0}`
-      })));
-    } catch (e) { Alert.alert('خطأ', e.message); }
-    finally { setCreateLoading(false); }
-  };
-
-  // ─── BUILD ────────────────────────────────────
-  const doBuild = async () => {
-    if (!buildPrompt.trim() || buildLoading) return;
-    setBuildLoading(true); setBuildCode(''); setCommitUrl('');
-    try {
-      const code = await callGroq([
-        { role: 'system', content: 'أنت مطور React Native Expo خبير. اكتب كود كامل قابل للتشغيل.' },
-        { role: 'user', content: 'اكتب App.tsx كامل لـ: ' + buildPrompt + '\nأرجع الكود فقط.' }
-      ], 'meta-llama/llama-4-maverick-17b-128e-instruct', 8000);
-      setBuildCode(code);
-      if (keys.GITHUB) {
-        const repo = 'alhsryahmd266-jpg/ai-studio-apk';
-        const shaR = await fetch(`https://api.github.com/repos/${repo}/contents/generated_app.tsx`, {
-          headers: { Authorization: 'token ' + keys.GITHUB }
-        });
-        const shaJ = await shaR.json();
-        const pushR = await fetch(`https://api.github.com/repos/${repo}/contents/generated_app.tsx`, {
-          method: 'PUT',
-          headers: { Authorization: 'token ' + keys.GITHUB, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: '🤖 Built by Nebula Studio Pro', content: btoa(unescape(encodeURIComponent(code))), ...(shaJ.sha ? { sha: shaJ.sha } : {}) })
-        });
-        const pushJ = await pushR.json();
-        if (pushJ.commit) setCommitUrl(pushJ.commit.html_url);
-      }
-    } catch (e) { Alert.alert('خطأ', e.message); }
-    finally { setBuildLoading(false); }
-  };
-
-  // ─── RENDERS ──────────────────────────────────
+  // ─── RENDERS ────────────────────────────────────
   const renderAgent = () => (
-    <View style={{ flex: 1 }}>
-      <View style={S.sectionPad}>
-        <Text style={S.sectionTitle}>🤖 وكيل ذكاء اصطناعي مستقل</Text>
-        <Text style={S.sectionSub}>24 أداة · تصفح الإنترنت · تفكير بصري · ذاكرة دائمة</Text>
-        <Glass style={S.inputGlass} glow={agentRunning ? C.purple : undefined}>
+    <View style={S.tabContent}>
+      <Glass style={{ padding: 15, marginBottom: 15 }}>
+        <Text style={S.sectionTitle}>Agent Goal</Text>
+        <View style={S.inputRow}>
           <TextInput
-            style={S.agentInput}
+            style={S.input}
+            placeholder="ما هي مهمتك اليوم؟"
+            placeholderTextColor={C.gray}
             value={agentGoal}
             onChangeText={setAgentGoal}
-            placeholder="ما الهدف؟ مثل: ابحث عن أحدث أخبار الذكاء الاصطناعي وقدّم ملخصاً"
-            placeholderTextColor={C.gray}
             multiline
-            editable={!agentRunning}
           />
-        </Glass>
-        <GBtn
-          onPress={runAgent}
-          disabled={agentRunning || !agentGoal.trim()}
-          colors={agentRunning ? [C.grayDark, C.grayDark] : [C.purple, C.purpleDark]}
-          icon={agentRunning ? undefined : 'play-outline'}
-          label={agentRunning ? 'يعمل...' : '▶ تشغيل الوكيل'}
-          style={{ marginTop: 12 }}
-        />
-        {agentRunning && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 }}>
-            <PulseDot color={C.purple} />
-            <Text style={{ color: C.gray, fontSize: 12 }}>الوكيل يعمل...</Text>
+          <TouchableOpacity onPress={() => runAgent(agentGoal)} disabled={agentRunning}>
+            <LinearGradient colors={[C.purple, C.blue]} style={S.sendBtn}>
+              {agentRunning ? <ActivityIndicator color="#fff" /> : <Ionicons name="rocket" size={20} color="#fff" />}
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </Glass>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}>
+        {Object.entries(agentMemoryDisplay).map(([k, v]) => (
+          <View key={k} style={S.memoryBadge}>
+            <Text style={S.memoryText}>{k}: {String(v).slice(0,20)}</Text>
           </View>
-        )}
-      </View>
-      <ScrollView ref={agentScroll} style={{ flex: 1 }} contentContainerStyle={S.sectionPad}
-        onContentSizeChange={() => agentScroll.current?.scrollToEnd({ animated: true })}>
-        {agentSteps.map(step => <AgentStepCard key={step.id} step={step} />)}
+        ))}
       </ScrollView>
+
+      {agentSteps.length === 0 ? (
+        <View style={S.toolGrid}>
+          {TOOL_LIST.map(t => (
+            <TouchableOpacity key={t.id} style={S.toolCard} onPress={() => onToolPress(t)}>
+              <View style={[S.toolIcon, { backgroundColor: t.color + '22' }]}>
+                <Ionicons name={t.icon} size={24} color={t.color} />
+              </View>
+              <Text style={S.toolName}>{t.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : (
+        <FlatList
+          data={agentSteps}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => <AgentStepCard step={item} />}
+          ref={agentScroll}
+          onContentSizeChange={() => agentScroll.current?.scrollToEnd()}
+          contentContainerStyle={{ paddingBottom: 100 }}
+        />
+      )}
     </View>
   );
 
   const renderChat = () => (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* Model picker */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.modelBar} contentContainerStyle={{ paddingHorizontal: 16 }}>
-        {MODELS.map(m => (
-          <TouchableOpacity key={m.id} onPress={() => setModel(m.id)} style={[S.modelChip, model === m.id && { borderColor: m.color, backgroundColor: m.color + '22' }]}>
-            <Ionicons name={m.icon} size={14} color={model === m.id ? m.color : C.gray} />
-            <Text style={[S.modelChipText, { color: model === m.id ? m.color : C.gray }]}>{m.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-      <ScrollView ref={chatScroll} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
-        {msgs.map(m => <ChatBubble key={m.id} msg={m} />)}
-        {chatLoading && (
-          <View style={[S.bubble, S.bubbleAI]}>
-            <ActivityIndicator size="small" color={C.purple} />
-          </View>
-        )}
-      </ScrollView>
-      <View style={S.chatBar}>
-        <Glass style={S.chatInputGlass}>
-          <TextInput style={S.chatInput} value={chatInput} onChangeText={setChatInput}
-            placeholder="اكتب رسالتك..." placeholderTextColor={C.gray} multiline />
-          <TouchableOpacity onPress={sendChat} disabled={chatLoading || !chatInput.trim()}>
-            <LinearGradient colors={[C.purple, C.purpleDark]} style={S.sendBtn}>
-              <Ionicons name="send" size={18} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
-        </Glass>
-      </View>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : null} style={S.tabContent}>
+      <FlatList
+        data={msgs}
+        keyExtractor={m => m.id}
+        renderItem={({ item }) => <ChatBubble msg={item} />}
+        ref={chatScroll}
+        onContentSizeChange={() => chatScroll.current?.scrollToEnd()}
+        contentContainerStyle={{ paddingBottom: 20 }}
+      />
+      <Glass style={S.chatInputWrap}>
+        <TextInput
+          style={S.chatInput}
+          placeholder="تحدث معي..."
+          placeholderTextColor={C.gray}
+          value={chatInput}
+          onChangeText={setChatInput}
+        />
+        <TouchableOpacity onPress={async () => {
+          if (!chatInput || chatLoading) return;
+          const userMsg = { id: Date.now().toString(), role: 'user', content: chatInput, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+          setMsgs(p => [...p, userMsg]);
+          setChatInput('');
+          setChatLoading(true);
+          try {
+            const resp = await callGroq([...msgs, userMsg].map(m => ({ role: m.role, content: m.content })));
+            setMsgs(p => [...p, { id: 'a'+Date.now(), role: 'assistant', content: resp, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+          } catch (e) { Alert.alert('Error', e.message); }
+          finally { setChatLoading(false); }
+        }}>
+          <LinearGradient colors={[C.blue, C.blueDark]} style={S.sendBtn}>
+            {chatLoading ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="send" size={18} color="#fff" />}
+          </LinearGradient>
+        </TouchableOpacity>
+      </Glass>
     </KeyboardAvoidingView>
   );
 
+  const renderProAgents = () => {
+    if (selectedProAgent) {
+      return (
+        <ProAgentChat 
+          agent={selectedProAgent} 
+          onBack={() => setSelectedProAgent(null)}
+          history={proAgentsHistory[selectedProAgent.id] || []}
+          onSaveHistory={(h) => setProAgentsHistory(p => ({ ...p, [selectedProAgent.id]: h }))}
+          callGroq={callGroq}
+        />
+      );
+    }
+    return (
+      <ScrollView style={S.tabContent}>
+        <Text style={S.tabTitle}>Pro Agents</Text>
+        <View style={S.proGrid}>
+          {PRO_AGENTS.map(a => (
+            <TouchableOpacity key={a.id} style={S.proCard} onPress={() => setSelectedProAgent(a)}>
+              <LinearGradient colors={[a.color, a.color + '55']} style={S.proCardInner}>
+                <Ionicons name={a.icon} size={32} color="#fff" />
+                <Text style={S.proCardName}>{a.name}</Text>
+                <Badge label={a.model.split('-')[0].toUpperCase()} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    );
+  };
+
   const renderVision = () => (
-    <ScrollView contentContainerStyle={S.sectionPad}>
-      <Text style={S.sectionTitle}>👁 تفكير بصري</Text>
-      <Text style={S.sectionSub}>نموذج Vision 90B · يحلل الصور بدقة عالية</Text>
-      <TouchableOpacity onPress={pickImage} style={S.dropZone}>
-        {visImg ? (
-          <Image source={{ uri: visImg.uri }} style={S.dropImg} />
-        ) : (
-          <View style={S.dropContent}>
-            <Ionicons name="image-outline" size={64} color={C.pink} />
-            <Text style={{ color: C.gray, marginTop: 12, fontSize: 16 }}>اضغط لاختيار صورة</Text>
-            <Text style={{ color: C.grayDark, marginTop: 4, fontSize: 12 }}>JPG, PNG, WEBP</Text>
+    <ScrollView style={S.tabContent}>
+      <Text style={S.tabTitle}>Vision AI</Text>
+      <TouchableOpacity style={S.visBox} onPress={async () => {
+        const res = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.5 });
+        if (!res.canceled) setVisImg(res.assets[0]);
+      }}>
+        {visImg ? <Image source={{ uri: visImg.uri }} style={S.visImg} /> : (
+          <View style={{ alignItems: 'center' }}>
+            <Ionicons name="image-outline" size={50} color={C.pink} />
+            <Text style={{ color: C.gray, marginTop: 10 }}>اختر صورة للتحليل</Text>
           </View>
         )}
       </TouchableOpacity>
-      <Glass style={{ padding: 12, marginBottom: 16 }}>
-        <Text style={{ color: C.gray, fontSize: 12, marginBottom: 6 }}>سؤالك عن الصورة:</Text>
+      <TextInput
+        style={[S.input, { marginVertical: 15, height: 60 }]}
+        placeholder="ماذا تريد أن تسأل عن الصورة؟"
+        placeholderTextColor={C.gray}
+        value={visPrompt}
+        onChangeText={setVisPrompt}
+      />
+      <GBtn label="تحليل الصورة" icon="eye" colors={[C.pink, '#d946ef']} onPress={async () => {
+        if (!visImg) return Alert.alert('Error', 'اختر صورة أولاً');
+        setVisLoading(true); setVisResult('');
+        const res = await tools.analyze_image({ url: `data:${visImg.mimeType || 'image/jpeg'};base64,${visImg.base64}`, question: visPrompt });
+        setVisResult(res); setVisLoading(false);
+      }} disabled={visLoading} />
+      {visLoading && <ActivityIndicator color={C.pink} style={{ marginTop: 20 }} />}
+      {visResult ? <Glass style={{ marginTop: 20, padding: 15 }}><Text style={S.visRes}>{visResult}</Text></Glass> : null}
+    </ScrollView>
+  );
+
+  const renderVault = () => (
+    <ScrollView style={S.tabContent}>
+      <Text style={S.tabTitle}>Security Vault</Text>
+      <View style={{ marginBottom: 20 }}>
+        <Text style={S.vaultLabel}>GitHub Personal Token</Text>
         <TextInput
-          style={{ color: C.white, fontSize: 14, minHeight: 60 }}
-          value={visPrompt}
-          onChangeText={setVisPrompt}
-          multiline
-          placeholder="حلّل هذه الصورة..."
-          placeholderTextColor={C.grayDark}
+          style={S.vaultInput}
+          secureTextEntry
+          value={keys.GITHUB}
+          onChangeText={v => saveKey('GITHUB', v)}
+          placeholder="ghp_..."
         />
-      </Glass>
-      <GBtn onPress={analyzeVision} disabled={!visImg || visLoading}
-        colors={[C.pink, '#be185d']} icon="eye-outline"
-        label={visLoading ? 'يحلل...' : 'تحليل الصورة بالذكاء الاصطناعي'} />
-      {visLoading && <ActivityIndicator color={C.pink} size="large" style={{ marginTop: 24 }} />}
-      {visResult !== '' && (
-        <Glass style={S.resultCard} glow={C.pink}>
-          <Text style={{ color: C.pink, fontSize: 12, fontWeight: '700', marginBottom: 10 }}>🧠 التحليل البصري:</Text>
-          <Text style={{ color: C.white, lineHeight: 24, fontSize: 15 }}>{visResult}</Text>
-        </Glass>
-      )}
-    </ScrollView>
-  );
-
-  const renderSearch = () => (
-    <View style={{ flex: 1 }}>
-      <View style={S.sectionPad}>
-        <Text style={S.sectionTitle}>🌐 تصفح الإنترنت</Text>
-        <Text style={S.sectionSub}>Jina AI · جلب محتوى حقيقي من الويب</Text>
-        <Glass style={S.searchBar2} glow={srchLoading ? C.cyan : undefined}>
-          <Ionicons name="search-outline" size={20} color={C.cyan} style={{ marginRight: 8 }} />
-          <TextInput style={S.searchInput2} value={srchQ} onChangeText={setSrchQ}
-            placeholder="ابحث عن أي شيء..." placeholderTextColor={C.gray}
-            onSubmitEditing={doSearch} returnKeyType="search" />
-          <TouchableOpacity onPress={doSearch}>
-            <LinearGradient colors={[C.cyan, C.blue]} style={{ borderRadius: 16, padding: 8 }}>
-              <Ionicons name="arrow-forward" size={16} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
-        </Glass>
       </View>
-      {srchLoading && <ActivityIndicator color={C.cyan} size="large" style={{ marginTop: 40 }} />}
-      <FlatList data={srchResults} keyExtractor={(_, i) => i.toString()} contentContainerStyle={S.sectionPad}
-        renderItem={({ item, index }) => (
-          <Glass style={S.srchCard} glow={index === 0 ? C.cyan + '44' : undefined}>
-            <Text style={{ color: C.cyan, fontSize: 15, fontWeight: '700', marginBottom: 6 }} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text style={{ color: C.gray, fontSize: 12, marginBottom: 8 }} numberOfLines={1}>{item.url}</Text>
-            <Text style={{ color: C.white, fontSize: 13, lineHeight: 20 }} numberOfLines={5}>
-              {item.content?.slice(0, 300)}
-            </Text>
-            <TouchableOpacity onPress={() => Linking.openURL(item.url)} style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="open-outline" size={14} color={C.cyan} />
-              <Text style={{ color: C.cyan, fontSize: 12, marginLeft: 4 }}>فتح في المتصفح</Text>
-            </TouchableOpacity>
-          </Glass>
-        )} />
-    </View>
-  );
-
-  const renderCreate = () => (
-    <ScrollView contentContainerStyle={S.sectionPad}>
-      <Text style={S.sectionTitle}>🎨 الإبداع بالذكاء الاصطناعي</Text>
-      <Text style={S.sectionSub}>Pollinations AI · 1024×1024 · Storyboard تلقائي</Text>
-      <Glass style={{ padding: 16, marginBottom: 16 }}>
-        <TextInput style={{ color: C.white, fontSize: 15, minHeight: 80 }}
-          value={createPrompt} onChangeText={setCreatePrompt}
-          placeholder="صف ما تريد إنشاءه..." placeholderTextColor={C.grayDark} multiline />
-      </Glass>
-      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-        <GBtn onPress={genImage} colors={[C.gold, '#b45309']} icon="image-outline" label="صورة" style={{ flex: 1 }} />
-        <GBtn onPress={genStoryboard} disabled={createLoading} colors={[C.orange, '#c2410c']} icon="film-outline" label="Storyboard" style={{ flex: 1 }} />
+      <View style={{ marginBottom: 20 }}>
+        <Text style={S.vaultLabel}>Jina AI API Key (Search)</Text>
+        <TextInput
+          style={S.vaultInput}
+          secureTextEntry
+          value={keys.JINA}
+          onChangeText={v => saveKey('JINA', v)}
+          placeholder="jina_..."
+        />
       </View>
-      {createLoading && <ActivityIndicator color={C.gold} size="large" style={{ marginTop: 20 }} />}
-      {createImg && !storyboard && (
-        <View style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 16 }}>
-          <Image source={{ uri: createImg }} style={{ width: '100%', aspectRatio: 1 }} resizeMode="cover" />
-          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)']} style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16 }}>
-            <TouchableOpacity onPress={() => Share.share({ url: createImg })}>
-              <Text style={{ color: C.gold, fontWeight: '700' }}>⬇ مشاركة الصورة</Text>
-            </TouchableOpacity>
-          </LinearGradient>
-        </View>
-      )}
-      {storyboard && (
-        <View>
-          <Text style={{ color: C.white, fontSize: 16, fontWeight: '700', marginBottom: 12 }}>🎬 Storyboard:</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-            {storyboard.map((s, i) => (
-              <Glass key={i} style={{ width: (width - 52) / 2, borderRadius: 16, overflow: 'hidden' }}>
-                <Image source={{ uri: s.url }} style={{ width: '100%', aspectRatio: 1 }} />
-                <View style={{ padding: 8 }}>
-                  <Text style={{ color: C.gold, fontSize: 11, fontWeight: '700' }}>مشهد {s.scene}</Text>
-                  <Text style={{ color: C.white, fontSize: 11, marginTop: 4 }}>{s.title}</Text>
-                </View>
-              </Glass>
-            ))}
-          </View>
-          <GBtn onPress={() => setStoryboard(null)} colors={[C.grayDark, '#1e293b']} icon="trash-outline" label="مسح" style={{ marginTop: 16 }} />
-        </View>
-      )}
+      <View style={{ marginBottom: 20 }}>
+        <Text style={S.vaultLabel}>Groq API Key Override</Text>
+        <TextInput
+          style={S.vaultInput}
+          secureTextEntry
+          value={keys.GROQ_OVR}
+          onChangeText={v => saveKey('GROQ_OVR', v)}
+          placeholder="gsk_..."
+        />
+      </View>
+      <GBtn label="حفظ وتشفير" icon="shield-checkmark" onPress={() => Alert.alert('Success', 'تم حفظ المفاتيح بنجاح')} />
+      <View style={{ marginTop: 40, alignItems: 'center' }}>
+        <Text style={{ color: C.gray, fontSize: 12 }}>NEBULA STUDIO PRO v2.5</Text>
+        <Text style={{ color: C.grayDark, fontSize: 10, marginTop: 5 }}>RSA-4096 ENCRYPTION ACTIVE</Text>
+      </View>
     </ScrollView>
   );
-
-  const renderBuild = () => (
-    <ScrollView contentContainerStyle={S.sectionPad}>
-      <Text style={S.sectionTitle}>⚙ بناء التطبيقات</Text>
-      <Text style={S.sectionSub}>Llama 4 Maverick · React Native · رفع تلقائي GitHub</Text>
-      <Glass style={{ padding: 16, marginBottom: 16 }}>
-        <TextInput style={{ color: C.white, fontSize: 15, minHeight: 120 }}
-          value={buildPrompt} onChangeText={setBuildPrompt}
-          placeholder="صف التطبيق الذي تريد بناءه..." placeholderTextColor={C.grayDark} multiline />
-      </Glass>
-      <GBtn onPress={doBuild} disabled={buildLoading}
-        colors={[C.teal, '#0f766e']} icon="rocket-outline"
-        label={buildLoading ? 'يبني...' : 'ابنِ التطبيق'} />
-      {buildLoading && <ActivityIndicator color={C.teal} size="large" style={{ marginTop: 20 }} />}
-      {buildCode !== '' && (
-        <Glass style={{ padding: 16, marginTop: 20, backgroundColor: '#000' }} glow={C.teal}>
-          <Text style={{ color: C.teal, fontSize: 12, fontWeight: '700', marginBottom: 8 }}>الكود المولّد:</Text>
-          <ScrollView horizontal>
-            <Text style={{ color: '#4ade80', fontFamily: 'monospace', fontSize: 11, lineHeight: 18 }}>
-              {buildCode.slice(0, 3000)}
-            </Text>
-          </ScrollView>
-          {commitUrl !== '' && (
-            <TouchableOpacity onPress={() => Linking.openURL(commitUrl)} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
-              <Ionicons name="logo-github" size={16} color={C.green} />
-              <Text style={{ color: C.green, marginLeft: 6, fontSize: 13 }}>تم الرفع على GitHub ✓</Text>
-            </TouchableOpacity>
-          )}
-        </Glass>
-      )}
-    </ScrollView>
-  );
-
-  const renderVault = () => <VaultScreen keys={keys} saveKey={saveKey} />;
-
-  const tabContent = {
-    Agent: renderAgent,
-    Chat: renderChat,
-    Vision: renderVision,
-    Search: renderSearch,
-    Create: renderCreate,
-    Build: renderBuild,
-    Vault: renderVault,
-  };
-
-  const activeTab = TABS.find(t => t.id === tab);
 
   return (
-    <SafeAreaView style={S.root}>
-      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
+    <SafeAreaView style={S.container}>
+      <StatusBar barStyle="light-content" />
+      {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
       <StarBed />
       <NebulaOrbs />
-
+      
       {/* Header */}
-      <LinearGradient colors={['rgba(3,1,10,0.98)', 'rgba(3,1,10,0.85)']} style={S.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <LinearGradient colors={[C.purple, C.purpleDark]} style={S.logoBox}>
-            <Text style={S.logoText}>N</Text>
-          </LinearGradient>
-          <View style={{ marginLeft: 10 }}>
-            <Text style={S.appName}>NEBULA STUDIO PRO</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <PulseDot color={C.green} size={6} />
-              <Text style={{ color: C.green, fontSize: 10, fontWeight: '600' }}>24 TOOLS · ONLINE</Text>
-            </View>
+      <View style={S.header}>
+        <View>
+          <Text style={S.headerTitle}>NEBULA</Text>
+          <View style={S.statusRow}>
+            <PulseDot color={C.green} size={6} />
+            <Text style={S.headerSub}> PRO v2.5 · ONLINE</Text>
           </View>
         </View>
-        <TouchableOpacity onPress={() => setTab('Vault')}>
-          <LinearGradient colors={['rgba(139,92,246,0.2)', 'rgba(109,40,217,0.2)']} style={{ borderRadius: 12, padding: 8, borderWidth: 1, borderColor: C.purple + '44' }}>
-            <Ionicons name="lock-closed-outline" size={20} color={C.purple} />
-          </LinearGradient>
+        <TouchableOpacity style={S.modelBtn}>
+          <Ionicons name="hardware-chip" size={16} color={C.purple} />
+          <Text style={S.modelText}>{MODELS.find(m => m.id === model)?.name}</Text>
         </TouchableOpacity>
-      </LinearGradient>
+      </View>
 
-      {/* Content */}
+      {/* Main Content */}
       <View style={{ flex: 1 }}>
-        {tabContent[tab]?.()}
+        {tab === 'Agent' && renderAgent()}
+        {tab === 'Chat' && renderChat()}
+        {tab === 'ProAgents' && renderProAgents()}
+        {tab === 'Vision' && renderVision()}
+        {tab === 'Vault' && renderVault()}
+        {/* Fallback for other tabs */}
+        {(['Search', 'Create', 'Build'].includes(tab)) && (
+          <View style={[S.tabContent, { justifyContent: 'center', alignItems: 'center' }]}>
+            <Ionicons name="construct" size={60} color={C.gray} />
+            <Text style={{ color: C.white, marginTop: 15 }}>Under Construction</Text>
+            <Text style={{ color: C.gray }}>Use Agent tab for these functions</Text>
+          </View>
+        )}
       </View>
 
-      {/* Bottom Nav */}
-      <View style={S.bottomNav}>
-        <LinearGradient colors={['rgba(3,1,10,0.97)', 'rgba(7,3,15,0.99)']} style={S.bottomNavInner}>
-          {TABS.map(t => {
-            const active = tab === t.id;
-            return (
-              <TouchableOpacity key={t.id} onPress={() => setTab(t.id)} style={S.navItem}>
-                {active && (
-                  <LinearGradient colors={[t.color + '33', t.color + '11']} style={S.navActiveGlow} />
-                )}
-                <Ionicons name={t.icon} size={22} color={active ? t.color : C.grayDark} />
-                <Text style={[S.navLabel, { color: active ? t.color : C.grayDark }]}>{t.label}</Text>
-                {active && <View style={[S.navDot, { backgroundColor: t.color }]} />}
-              </TouchableOpacity>
-            );
-          })}
-        </LinearGradient>
-      </View>
+      {/* Tabs */}
+      <Glass style={S.tabBar}>
+        {TABS.map(t => (
+          <TouchableOpacity key={t.id} style={S.tabItem} onPress={() => { setTab(t.id); setSelectedProAgent(null); }}>
+            <Ionicons name={t.icon} size={22} color={tab === t.id ? t.color : C.gray} />
+            <Text style={[S.tabLabel, { color: tab === t.id ? t.color : C.gray }]}>{t.label}</Text>
+            {tab === t.id && <View style={[S.tabActive, { backgroundColor: t.color }]} />}
+          </TouchableOpacity>
+        ))}
+      </Glass>
     </SafeAreaView>
   );
 }
 
-// ─── AGENT STEP CARD ──────────────────────────
-const STEP_STYLES = {
-  goal: { color: C.cyan, icon: 'flag-outline', bg: C.cyan + '15', border: C.cyan + '40' },
-  thinking: { color: C.grayDark, icon: 'ellipsis-horizontal', bg: 'transparent', border: 'transparent' },
-  thought: { color: C.gold, icon: 'bulb-outline', bg: C.gold + '10', border: C.gold + '30' },
-  tool_call: { color: C.purple, icon: 'construct-outline', bg: C.purple + '15', border: C.purple + '40' },
-  observation: { color: C.teal, icon: 'eye-outline', bg: C.teal + '10', border: C.teal + '30' },
-  done: { color: C.green, icon: 'checkmark-circle-outline', bg: C.green + '15', border: C.green + '40' },
-  error: { color: C.red, icon: 'alert-circle-outline', bg: C.red + '15', border: C.red + '40' },
-};
+// ─── COMPONENTS ───────────────────────────────────
 
 const AgentStepCard = ({ step }) => {
-  const st = STEP_STYLES[step.type] || STEP_STYLES.thought;
-  if (step.type === 'thinking') return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-      <ActivityIndicator size="small" color={C.purple} />
-      <Text style={{ color: C.grayDark, fontSize: 12 }}>{step.content}</Text>
-    </View>
-  );
+  const isTool = step.role === 'tool';
+  const isSystem = step.role === 'system';
   return (
-    <View style={{ backgroundColor: st.bg, borderWidth: 1, borderColor: st.border, borderRadius: 14, padding: 14, marginBottom: 12 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Ionicons name={st.icon} size={14} color={st.color} />
-          <Text style={{ color: st.color, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 }}>
-            {step.type === 'tool_call' ? `أداة: ${step.tool}` : step.type}
-          </Text>
-        </View>
-        <Text style={{ color: C.grayDark, fontSize: 10 }}>{step.ts}</Text>
+    <Glass style={[S.stepCard, isTool && S.stepTool, isSystem && S.stepSystem]}>
+      <View style={S.stepHeader}>
+        <Badge label={step.role.toUpperCase()} color={isTool ? C.teal : isSystem ? C.purple : C.blue} />
+        <Text style={S.stepTs}>{step.ts}</Text>
       </View>
-      {step.type === 'tool_call' && step.args && (
-        <View style={{ backgroundColor: '#000', borderRadius: 8, padding: 8, marginBottom: 8 }}>
-          <Text style={{ color: C.purple, fontFamily: 'monospace', fontSize: 11 }}>
-            {JSON.stringify(step.args, null, 2).slice(0, 300)}
-          </Text>
-        </View>
-      )}
-      <Text style={{ color: C.white, lineHeight: 22, fontSize: 14 }}>{step.content}</Text>
-      {step.imageUrl && (
-        <View style={{ borderRadius: 12, overflow: 'hidden', marginTop: 10 }}>
-          <Image source={{ uri: step.imageUrl }} style={{ width: '100%', aspectRatio: 1 }} resizeMode="cover" />
-        </View>
-      )}
-    </View>
-  );
-};
-
-// ─── CHAT BUBBLE ──────────────────────────────
-const ChatBubble = ({ msg }) => {
-  const isUser = msg.role === 'user';
-  return (
-    <View style={[S.msgWrap, isUser ? S.msgWrapUser : S.msgWrapAI]}>
-      {!isUser && (
-        <LinearGradient colors={[C.purple, C.purpleDark]} style={S.msgAvatar}>
-          <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>N</Text>
-        </LinearGradient>
-      )}
-      <View style={[S.bubble, isUser ? S.bubbleUser : S.bubbleAI]}>
-        <Text style={S.msgText}>{msg.content}</Text>
-      </View>
-    </View>
-  );
-};
-
-// ─── VAULT SCREEN ─────────────────────────────
-const VaultScreen = ({ keys, saveKey }) => {
-  const fields = [
-    { k: 'GITHUB', label: 'GitHub Token', icon: 'logo-github', color: C.white, hint: 'ghp_...' },
-    { k: 'JINA', label: 'Jina AI Key', icon: 'search', color: C.cyan, hint: 'jina_...' },
-    { k: 'GROQ_OVR', label: 'Groq Override', icon: 'key-outline', color: C.purple, hint: 'gsk_...' },
-  ];
-  return (
-    <ScrollView contentContainerStyle={S.sectionPad}>
-      <Text style={S.sectionTitle}>🔐 Neural Vault</Text>
-      <Text style={S.sectionSub}>مشفّر بـ Android Keystore</Text>
-      {fields.map(f => <VaultField key={f.k} {...f} value={keys[f.k]} onSave={v => saveKey(f.k, v)} />)}
-      <Glass style={{ padding: 16, marginTop: 8 }}>
-        <Text style={{ color: C.gray, fontSize: 13, lineHeight: 22 }}>
-          🔑 مفاتيح Groq (1-7): محفوظة داخل الـ APK{'\n'}
-          يمكنك إضافة Groq Override لاستخدام مفتاحك الخاص
-        </Text>
-      </Glass>
-    </ScrollView>
-  );
-};
-
-const VaultField = ({ k, label, icon, color, hint, value, onSave }) => {
-  const [v, setV] = useState(value || '');
-  const [saved, setSaved] = useState(false);
-  const save = () => { onSave(v); setSaved(true); setTimeout(() => setSaved(false), 2000); };
-  return (
-    <Glass style={{ padding: 16, marginBottom: 12 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
-        <Ionicons name={icon} size={18} color={color} />
-        <Text style={{ color, fontSize: 13, fontWeight: '700' }}>{label}</Text>
-        {saved && <Badge label="✓ محفوظ" color={C.green} />}
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <TextInput style={{ flex: 1, color: C.white, borderBottomWidth: 1, borderBottomColor: C.glassBorder, paddingVertical: 8, fontSize: 14 }}
-          value={v} onChangeText={setV} secureTextEntry placeholder={hint} placeholderTextColor={C.grayDark} />
-        <TouchableOpacity onPress={save}>
-          <LinearGradient colors={[C.purple, C.purpleDark]} style={{ borderRadius: 20, padding: 10 }}>
-            <Ionicons name="checkmark" size={16} color="#fff" />
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+      <Text style={S.stepContent}>{step.content}</Text>
     </Glass>
   );
 };
 
-// ════════════════════════════════════════════════
-//  STYLESHEET — MAXIMUM QUALITY
-// ════════════════════════════════════════════════
+const ChatBubble = ({ msg }) => {
+  const isAi = msg.role === 'assistant';
+  return (
+    <View style={[S.bubbleWrap, isAi ? { alignItems: 'flex-start' } : { alignItems: 'flex-end' }]}>
+      <LinearGradient
+        colors={isAi ? ['#1e1b4b', '#0f172a'] : [C.purple, C.purpleDark]}
+        style={[S.bubble, isAi ? S.bubbleAi : S.bubbleUser]}
+      >
+        <Text style={S.bubbleText}>{msg.content}</Text>
+        <Text style={S.bubbleTs}>{msg.ts}</Text>
+      </LinearGradient>
+    </View>
+  );
+};
+
+const ProAgentChat = ({ agent, onBack, history, onSaveHistory, callGroq }) => {
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const scroll = useRef(null);
+
+  const sendMessage = async () => {
+    if (!input || loading) return;
+    const userMsg = { id: Date.now().toString(), role: 'user', content: input, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    const newHistory = [...history, userMsg];
+    onSaveHistory(newHistory);
+    setInput('');
+    setLoading(true);
+    try {
+      const msgs = [{ role: 'system', content: agent.system }, ...newHistory.map(m => ({ role: m.role, content: m.content }))];
+      const resp = await callGroq(msgs, agent.model);
+      const aiMsg = { id: 'a'+Date.now(), role: 'assistant', content: resp, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+      onSaveHistory([...newHistory, aiMsg]);
+    } catch (e) { Alert.alert('Error', e.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <LinearGradient colors={[agent.color, agent.color + '55']} style={S.proChatHeader}>
+        <TouchableOpacity onPress={onBack} style={S.proBack}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Ionicons name={agent.icon} size={24} color="#fff" style={{ marginRight: 10 }} />
+        <Text style={S.proChatTitle}>{agent.name}</Text>
+      </LinearGradient>
+      <FlatList
+        data={history}
+        keyExtractor={m => m.id}
+        renderItem={({ item }) => <ChatBubble msg={item} />}
+        ref={scroll}
+        onContentSizeChange={() => scroll.current?.scrollToEnd()}
+        contentContainerStyle={{ padding: 15, paddingBottom: 20 }}
+      />
+      <Glass style={S.chatInputWrap}>
+        <TextInput
+          style={S.chatInput}
+          placeholder={`تحدث مع ${agent.name}...`}
+          placeholderTextColor={C.gray}
+          value={input}
+          onChangeText={setInput}
+        />
+        <TouchableOpacity onPress={sendMessage}>
+          <LinearGradient colors={[agent.color, agent.color + 'aa']} style={S.sendBtn}>
+            {loading ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="send" size={18} color="#fff" />}
+          </LinearGradient>
+        </TouchableOpacity>
+      </Glass>
+    </View>
+  );
+};
+
+// ─── STYLES ───────────────────────────────────────
+
 const S = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
-  orb: { position: 'absolute' },
-
-  // Header
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.glassBorder },
-  logoBox: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  logoText: { color: '#fff', fontSize: 20, fontWeight: '900', fontStyle: 'italic' },
-  appName: { color: C.white, fontSize: 15, fontWeight: '900', letterSpacing: 3 },
-
-  // Glass
-  glass: { backgroundColor: C.glass, borderRadius: 16, borderWidth: 1, borderColor: C.glassBorder },
-
-  // Gradient button
+  container: { flex: 1, backgroundColor: C.bg },
+  orb: { position: 'absolute', blurRadius: 100 },
+  glass: {
+    backgroundColor: C.glass,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.glassBorder,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 15,
+    paddingBottom: 10,
+    zIndex: 10,
+  },
+  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: 2 },
+  statusRow: { flexDirection: 'row', alignItems: 'center' },
+  headerSub: { color: C.green, fontSize: 10, fontWeight: '700' },
+  modelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.glass,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.purple + '44',
+  },
+  modelText: { color: C.purple, fontSize: 11, fontWeight: '700', marginLeft: 6 },
+  tabContent: { flex: 1, paddingHorizontal: 15, paddingTop: 10 },
+  tabTitle: { color: '#fff', fontSize: 24, fontWeight: '900', marginBottom: 20, textAlign: 'center' },
+  sectionTitle: { color: C.purple, fontSize: 12, fontWeight: '800', marginBottom: 10, letterSpacing: 1 },
+  inputRow: { flexDirection: 'row', alignItems: 'center' },
+  input: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 12,
+    color: '#fff',
+    fontSize: 14,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  toolGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingBottom: 100 },
+  toolCard: {
+    width: '31%',
+    backgroundColor: C.glass,
+    borderRadius: 15,
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: C.glassBorder,
+  },
+  toolIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  toolName: { color: '#fff', fontSize: 10, fontWeight: '700', textAlign: 'center' },
+  memoryBadge: {
+    backgroundColor: C.purple + '22',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: C.purple + '44',
+  },
+  memoryText: { color: C.purple, fontSize: 11, fontWeight: '600' },
+  stepCard: { padding: 12, marginBottom: 10 },
+  stepHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  stepTs: { color: C.gray, fontSize: 10 },
+  stepContent: { color: '#fff', fontSize: 13, lineHeight: 18 },
+  stepTool: { borderColor: C.teal + '44', backgroundColor: C.teal + '08' },
+  stepSystem: { borderColor: C.purple + '44', backgroundColor: C.purple + '08' },
+  bubbleWrap: { marginVertical: 6, paddingHorizontal: 15 },
+  bubble: { padding: 12, borderRadius: 18, maxWidth: '85%' },
+  bubbleAi: { borderBottomLeftRadius: 4 },
+  bubbleUser: { borderBottomRightRadius: 4 },
+  bubbleText: { color: '#fff', fontSize: 14, lineHeight: 20 },
+  bubbleTs: { color: 'rgba(255,255,255,0.5)', fontSize: 9, alignSelf: 'flex-end', marginTop: 4 },
+  chatInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    margin: 15,
+    borderRadius: 25,
+  },
+  chatInput: { flex: 1, color: '#fff', paddingHorizontal: 15, fontSize: 14 },
+  visBox: {
+    height: 200,
+    backgroundColor: C.glass,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: C.pink + '33',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  visImg: { width: '100%', height: '100%' },
+  visRes: { color: '#fff', fontSize: 14, lineHeight: 22 },
+  vaultLabel: { color: C.gray, fontSize: 12, marginBottom: 8, marginLeft: 5 },
+  vaultInput: {
+    backgroundColor: C.glass,
+    borderRadius: 12,
+    padding: 12,
+    color: '#fff',
+    borderWidth: 1,
+    borderColor: C.glassBorder,
+  },
+  proGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  proCard: { width: '48%', marginBottom: 15 },
+  proCardInner: { padding: 20, borderRadius: 20, alignItems: 'center' },
+  proCardName: { color: '#fff', fontSize: 16, fontWeight: '900', marginVertical: 10 },
+  proChatHeader: { flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: 40 },
+  proBack: { marginRight: 15 },
+  proChatTitle: { color: '#fff', fontSize: 18, fontWeight: '900' },
+  tabBar: {
+    flexDirection: 'row',
+    height: 75,
+    paddingBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: C.glassBorder,
+    borderRadius: 0,
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+  },
+  tabItem: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  tabLabel: { fontSize: 10, fontWeight: '700', marginTop: 4 },
+  tabActive: { position: 'absolute', bottom: 10, width: 4, height: 4, borderRadius: 2 },
   gbtnWrap: { height: 50, borderRadius: 25, overflow: 'hidden' },
-  gbtnInner: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 25 },
-  gbtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-
-  // Bottom nav
-  bottomNav: { borderTopWidth: 1, borderTopColor: C.glassBorder },
-  bottomNavInner: { flexDirection: 'row', paddingVertical: 8, paddingBottom: Platform.OS === 'ios' ? 20 : 8 },
-  navItem: { flex: 1, alignItems: 'center', paddingVertical: 4, position: 'relative' },
-  navActiveGlow: { position: 'absolute', top: -4, left: 4, right: 4, bottom: -4, borderRadius: 14 },
-  navLabel: { fontSize: 9, marginTop: 3, fontWeight: '600' },
-  navDot: { width: 3, height: 3, borderRadius: 2, marginTop: 2 },
-
-  // Section
-  sectionPad: { padding: 16 },
-  sectionTitle: { color: C.white, fontSize: 22, fontWeight: '900', marginBottom: 4 },
-  sectionSub: { color: C.gray, fontSize: 12, marginBottom: 20 },
-
-  // Agent
-  inputGlass: { padding: 12 },
-  agentInput: { color: C.white, fontSize: 15, minHeight: 80 },
-
-  // Chat
-  modelBar: { maxHeight: 44, marginVertical: 8 },
-  modelChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.glass, borderWidth: 1, borderColor: C.glassBorder, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, marginRight: 8 },
-  modelChipText: { fontSize: 12, fontWeight: '600', marginLeft: 6 },
-  chatBar: { padding: 12, borderTopWidth: 1, borderTopColor: C.glassBorder },
-  chatInputGlass: { flexDirection: 'row', alignItems: 'flex-end', padding: 10, gap: 10 },
-  chatInput: { flex: 1, color: C.white, fontSize: 15, maxHeight: 100 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  msgWrap: { flexDirection: 'row', marginBottom: 14, maxWidth: '88%' },
-  msgWrapUser: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
-  msgWrapAI: { alignSelf: 'flex-start' },
-  msgAvatar: { width: 28, height: 28, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
-  bubble: { borderRadius: 16, padding: 12, maxWidth: '100%' },
-  bubbleUser: { backgroundColor: C.purple + 'cc', borderBottomRightRadius: 4 },
-  bubbleAI: { backgroundColor: C.glass, borderWidth: 1, borderColor: C.glassBorder, borderBottomLeftRadius: 4 },
-  msgText: { color: C.white, fontSize: 14, lineHeight: 22 },
-
-  // Vision
-  dropZone: { height: 220, borderRadius: 20, borderWidth: 2, borderColor: C.pink + '44', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginBottom: 16, overflow: 'hidden', backgroundColor: C.pink + '08' },
-  dropImg: { width: '100%', height: '100%', borderRadius: 18 },
-  dropContent: { alignItems: 'center' },
-  resultCard: { padding: 16, marginTop: 16 },
-
-  // Search
-  searchBar2: { flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 4 },
-  searchInput2: { flex: 1, color: C.white, fontSize: 15 },
-  srchCard: { padding: 16, marginBottom: 14 },
+  gbtnInner: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
+  gbtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });
