@@ -47,20 +47,27 @@ jobs:
           EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
           EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
 
-      - name: Fix Kotlin version and Gradle properties
+      - name: Fix Kotlin and Gradle
         run: |
           chmod +x android/gradlew
-          echo "=== Patching android/build.gradle Kotlin version to 1.9.25 ==="
-          # Patch the top-level build.gradle to use Kotlin 1.9.25
-          if [ -f android/build.gradle ]; then
-            sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/g' android/build.gradle
-            sed -i "s/kotlinVersion = '1.9.24'/kotlinVersion = '1.9.25'/g" android/build.gradle
-            # Also catch any other 1.9.2x versions
-            sed -i 's/kotlinVersion = "1\.9\.2[0-9]"/kotlinVersion = "1.9.25"/g' android/build.gradle
-            echo "=== android/build.gradle after patch ==="
-            grep -A2 -B2 "kotlin" android/build.gradle | head -20 || true
-          fi
-          # Fix gradle.properties
+
+          # ── 1. Gradle init script: suppress Compose/Kotlin compatibility check ──
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/suppress-compose-check.gradle << 'INITEOF'
+          allprojects {
+            afterEvaluate { proj ->
+              proj.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { t ->
+                def current = t.kotlinOptions.freeCompilerArgs.toList()
+                def flag = 'plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=true'
+                if (!current.contains(flag)) {
+                  t.kotlinOptions.freeCompilerArgs = current + ['-P', flag]
+                }
+              }
+            }
+          }
+          INITEOF
+
+          # ── 2. gradle.properties tuning ──
           sed -i '/android\.kotlinVersion/d' android/gradle.properties
           sed -i '/kotlin\.version/d' android/gradle.properties
           sed -i '/kotlinVersion/d' android/gradle.properties
@@ -70,8 +77,11 @@ jobs:
           printf 'org.gradle.configureondemand=false\n' >> android/gradle.properties
           printf 'android.suppressUnsupportedCompileSdk=35\n' >> android/gradle.properties
           printf 'android.kotlinVersion=1.9.25\n' >> android/gradle.properties
+
           echo "=== gradle.properties ==="
           cat android/gradle.properties
+          echo "=== Gradle init script ==="
+          cat ~/.gradle/init.d/suppress-compose-check.gradle
 
       - name: Build Debug APK
         working-directory: android
@@ -91,7 +101,7 @@ jobs:
             find android/app/build -type f 2>/dev/null | head -20
             exit 1
           fi
-          echo "APK: $APK ($(du -h "$APK" | cut -f1))"
+          echo "APK: $APK  size: $(du -h "$APK" | cut -f1)"
           echo "APK_PATH=$APK" >> $GITHUB_ENV
 
       - name: Generate RSA-4096 Keystore
@@ -134,15 +144,15 @@ jobs:
             ### الميزات / Features
             - 🤖 **Autonomous Agent** — ReAct Loop, 10 tools, persistent memory
             - 🧠 **6 AI Models** — Llama 4 Maverick, DeepSeek R1, QwQ 32B, Vision 90B + more
-            - 🔑 **7 Rotating Groq Keys** — auto-failover, zero downtime
-            - 👁️ **Vision Analysis** — 90B parameter vision model
+            - 🔑 **7 Rotating Groq Keys** — zero-downtime auto-failover
+            - 👁️ **Vision Analysis** — 90B parameter multimodal model
             - 🌐 **Web Search** — Jina AI real-time results
             - 🎨 **AI Image Generation** — Pollinations AI 768×768
-            - 🎬 **Video Storyboard** — 4-scene AI storyboard generator
-            - 🔧 **Code Builder** — generates & pushes to GitHub autonomously
-            - 🔒 **Encrypted Vault** — Android Keystore / Keychain secured
-            - ✍️ **Self-Improving Agent** — can push code to GitHub to evolve itself
-            - 🌌 **Ultra-Premium Design** — animated star field, glassmorphism, neon glow
+            - 🎬 **Video Storyboard** — AI 4-scene generator
+            - 🔧 **Code Builder** — generates & auto-pushes to GitHub
+            - 🔒 **Encrypted Vault** — Android Keystore secured
+            - ✍️ **Self-Improving** — agent pushes code to GitHub autonomously
+            - 🌌 **World-Class Design** — 80-star field, glassmorphism, neon glow
 
             ### التوقيع الرقمي / Digital Signature
             - **Algorithm**: RSA-4096
