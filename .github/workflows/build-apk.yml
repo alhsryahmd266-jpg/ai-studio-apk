@@ -72,15 +72,15 @@ jobs:
           echo "=== gradle.properties ==="
           cat android/gradle.properties
 
-      - name: Bundle JavaScript into APK (fix standalone mode)
+      - name: Bundle JavaScript into APK (Expo 52 standalone mode)
         run: |
           mkdir -p android/app/src/main/assets
-          npx react-native bundle \
+          npx expo export:embed \
             --platform android \
-            --dev false \
             --entry-file index.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res/ \
+            --dev false \
             --reset-cache
           echo "=== Bundle size ==="
           du -h android/app/src/main/assets/index.android.bundle
