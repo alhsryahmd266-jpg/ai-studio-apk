@@ -151,9 +151,9 @@ const TOOL_LIST = [
   { id: 'read_memory', name: 'Read RAM', icon: 'reader-outline', color: C.teal, prompt: 'Read from memory: ' },
   { id: 'save_memory', name: 'Save RAM', icon: 'save-outline', color: C.green, prompt: 'Save to memory: ' },
   { id: 'list_memory', name: 'List RAM', icon: 'layers-outline', color: C.blue, prompt: 'List all memory items' },
-  { id: 'social_share', name: 'Share', icon: 'share-social-outline', color: C.blue, prompt: 'Share this: ' },
-  { id: 'text_to_speech', name: 'TTS', icon: 'volume-high-outline', color: C.pink, prompt: 'Speak this: ' },
-  { id: 'extract_info', name: 'Extract Data', icon: 'finger-print-outline', color: C.cyan, prompt: 'Extract info from: ' },
+  { id: 'calculate', name: 'حساب', icon: 'calculator-outline', color: C.green, prompt: 'احسب: ' },
+  { id: 'get_datetime', name: 'التاريخ', icon: 'calendar-outline', color: C.gold, prompt: 'ما التاريخ والوقت الآن؟' },
+  { id: 'format_json', name: 'Format JSON', icon: 'code-outline', color: C.teal, prompt: 'نسّق هذا JSON: ' },
 ];
 
 const safeBase64 = (str) => {
@@ -403,21 +403,32 @@ export default function App() {
       const key = getGroqKey(base + t);
       if (!key) continue;
       try {
-        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: mdl || model, messages, temperature: 0.7, max_tokens: maxTokens }),
-        });
-        if (r.status === 429 || r.status === 401) { lastErr = new Error('key rate limited'); continue; }
-        if (r.status >= 500) { lastErr = new Error('server error ' + r.status); await new Promise(r => setTimeout(r, 1000)); continue; }
-        if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || 'Groq error'); }
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 30000);
+        let r;
+        try {
+          r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: mdl || model, messages, temperature: 0.7, max_tokens: maxTokens }),
+            signal: controller.signal,
+          });
+        } finally { clearTimeout(timer); }
+        if (r.status === 429 || r.status === 401) { lastErr = new Error('key ' + (((base+t)%7)+1) + ' rate limited'); continue; }
+        if (r.status >= 500) { lastErr = new Error('server error ' + r.status); await new Promise(x => setTimeout(x, 1000)); continue; }
+        if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || 'Groq error ' + r.status); }
         const d = await r.json();
         return d.choices[0].message.content;
       } catch (e) {
         const msg = e.message?.toLowerCase() || '';
+        if (msg.includes('aborted') || msg.includes('timeout')) {
+          lastErr = new Error('timeout key ' + (((base+t)%7)+1));
+          await new Promise(x => setTimeout(x, 500));
+          continue;
+        }
         if (msg.includes('rate') || msg.includes('limit') || msg.includes('network') || msg.includes('fetch')) {
-          lastErr = e; 
-          await new Promise(r => setTimeout(r, 500));
+          lastErr = e;
+          await new Promise(x => setTimeout(x, 500));
           continue;
         }
         throw e;
@@ -624,28 +635,21 @@ export default function App() {
       if (!entries.length) return '🧠 الذاكرة فارغة';
       return '🧠 ' + entries.map(([k,v]) => `${k}: ${String(v).slice(0,100)}`).join('\n');
     },
-    social_share: async ({ content }) => {
-      try { await Share.share({ message: content }); return '✅ تمت المشاركة'; }
-      catch (e) { return '❌ فشل المشاركة'; }
-    },
-    text_to_speech: async ({ text }) => {
-      return `🔊 (Simulated TTS): ${text.slice(0, 100)}...`;
-    },
-    extract_info: async ({ text, schema }) => {
+    calculate: async ({ expr }) => {
       try {
-        return await callGroq([
-          { role: 'system', content: `استخرج البيانات من النص بناءً على هذا الـ Schema: ${schema}. أرجع JSON فقط.` },
-          { role: 'user', content: text.slice(0, 5000) }
-        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
-      } catch (e) { return 'فشل الاستخراج: ' + e.message; }
+        const result = Function('"use strict"; return (' + expr + ')')();
+        return `🔢 ${expr} = ${result}`;
+      } catch (e) { return 'خطأ في الحساب: ' + e.message; }
     },
-    creative_write: async ({ topic, style = 'creative' }) => {
+    get_datetime: async () => {
+      const now = new Date();
+      return `📅 ${now.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n⏰ ${now.toLocaleTimeString('ar-EG')}`;
+    },
+    format_json: async ({ data }) => {
       try {
-        return await callGroq([
-          { role: 'system', content: `أنت كاتب مبدع خبير. اكتب نصاً بأسلوب ${style}.` },
-          { role: 'user', content: 'اكتب عن: ' + topic }
-        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
-      } catch (e) { return 'فشل الكتابة: ' + e.message; }
+        const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+        return JSON.stringify(parsed, null, 2);
+      } catch (e) { return 'خطأ في تنسيق JSON: ' + e.message; }
     },
   }), [keys, model]);
 
