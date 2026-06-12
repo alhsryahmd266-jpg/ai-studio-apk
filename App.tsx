@@ -662,7 +662,7 @@ function VisionTab() {
         </View>
         <View style={{ flexDirection:'row', gap:10, marginBottom:14 }}>
           <TouchableOpacity style={[S.actionBtn, { flex:1, borderColor:T.accent }]} onPress={() => pick(false)}>
-            <Ionicons name="images" size:18 color={T.accent} />
+            <Ionicons name="images" size={18} color={T.accent} />
             <Text style={[S.actionTxt, { color:T.accent }]}>معرض</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[S.actionBtn, { flex:1, borderColor:T.accent2 }]} onPress={() => pick(true)}>
