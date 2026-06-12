@@ -328,7 +328,7 @@ export default function App() {
 
   // Chat
   const [msgs, setMsgs] = useState([
-    { id: '0', role: 'assistant', content: '🌌 أهلاً بك في NEBULA STUDIO PRO\n\nأنا وكيل ذكاء اصطناعي قادر على:\n• تصفح الإنترنت بنفسي\n• تحليل الصور والتفكير البصري\n• كتابة وتنفيذ الكود\n• 24 أداة احترافية\n\nما الذي تريده اليوم؟', ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+    { id: '0', role: 'assistant', content: '🌌 أهلاً بك في NEBULA STUDIO PRO v3.0\n\n🌐 مرتبط بسيرفر NEBULA الأصلي\n\nقادر على:\n• تصفح الإنترنت بنفسي ⚡\n• تحليل الصور والتفكير البصري\n• كتابة وتنفيذ الكود\n• 24 أداة + وكيل ذكاء اصطناعي كامل\n\nما الذي تريده اليوم؟', ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -379,6 +379,7 @@ export default function App() {
         GITHUB: await SecureStore.getItemAsync('GITHUB') || process.env.EXPO_PUBLIC_GITHUB_TOKEN || '',
         JINA: await SecureStore.getItemAsync('JINA') || '',
         GROQ_OVR: await SecureStore.getItemAsync('GROQ_OVR') || '',
+        SERVER: await SecureStore.getItemAsync('SERVER_URL') || process.env.EXPO_PUBLIC_SERVER_URL || '',
       };
       setKeys(k);
     } catch {}
@@ -436,6 +437,20 @@ export default function App() {
     }
     throw lastErr || new Error('جميع مفاتيح Groq استُنزفت');
   };
+
+  // ─── SERVER TUNNEL ──────────────────────────────
+  const callServer = async (payload) => {
+    const url = (keys.SERVER || '').replace(/\/$/, '') + '/api/chat';
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error('Server ' + r.status);
+    return await r.json();
+  };
+
+
 
   // ─── 24 AGENT TOOLS ─────────────────────────────
   const tools = useMemo(() => ({
@@ -660,33 +675,42 @@ export default function App() {
     setAgentGoal(goal);
     setAgentSteps([{ id: '1', role: 'system', content: '🚀 بدء المهمة: ' + goal, ts: new Date().toLocaleTimeString() }]);
 
-    let history = [
-      { role: 'system', content: `أنت وكيل NEBULA الذكي. لديك 24 أداة. 
+    try {
+      if (keys.SERVER) {
+        // ── NEBULA SERVER TUNNEL ──
+        setAgentSteps(p => [...p, { id: 'srv', role: 'system', content: '🌐 متصل بسيرفر NEBULA...', ts: new Date().toLocaleTimeString() }]);
+        const result = await callServer({ goal, mode: 'agent' });
+        (result.steps || []).forEach((s, i) => {
+          setAgentSteps(p => [...p, { id: 'st'+i, role: 'tool', content: `🛠 ${s.tool}\n${s.result}`, ts: new Date().toLocaleTimeString() }]);
+        });
+        setAgentSteps(p => [...p, { id: 'final', role: 'assistant', content: result.content || 'تمت المهمة', ts: new Date().toLocaleTimeString() }]);
+      } else {
+        // ── LOCAL GROQ FALLBACK ──
+        let history = [
+          { role: 'system', content: `أنت وكيل NEBULA الذكي. لديك 24 أداة.
 استخدم الأدوات عبر كتابة JSON: {"tool": "name", "args": {...}}
 لا تتوقف حتى تنهي المهمة تماماً.
 الأدوات المتاحة: ${Object.keys(tools).join(', ')}` },
-      { role: 'user', content: goal }
-    ];
-
-    try {
-      for (let i = 0; i < 15; i++) {
-        const resp = await callGroq(history);
-        setAgentSteps(p => [...p, { id: Date.now().toString(), role: 'assistant', content: resp, ts: new Date().toLocaleTimeString() }]);
-        
-        const toolMatch = resp.match(/\{[\s\S]*?"tool"[\s\S]*?\}/);
-        if (toolMatch) {
-          try {
-            const { tool, args } = JSON.parse(toolMatch[0]);
-            if (tools[tool]) {
-              const res = await tools[tool](args);
-              setAgentSteps(p => [...p, { id: 'r'+Date.now(), role: 'tool', content: `🛠 ${tool} -> ${res.slice(0,500)}`, ts: new Date().toLocaleTimeString() }]);
-              history.push({ role: 'assistant', content: resp });
-              history.push({ role: 'user', content: `Tool Result: ${res}` });
-              continue;
-            }
-          } catch {}
+          { role: 'user', content: goal }
+        ];
+        for (let i = 0; i < 15; i++) {
+          const resp = await callGroq(history);
+          setAgentSteps(p => [...p, { id: Date.now().toString(), role: 'assistant', content: resp, ts: new Date().toLocaleTimeString() }]);
+          const toolMatch = resp.match(/\{[\s\S]*?"tool"[\s\S]*?\}/);
+          if (toolMatch) {
+            try {
+              const { tool, args } = JSON.parse(toolMatch[0]);
+              if (tools[tool]) {
+                const res = await tools[tool](args);
+                setAgentSteps(p => [...p, { id: 'r'+Date.now(), role: 'tool', content: `🛠 ${tool} -> ${res.slice(0,500)}`, ts: new Date().toLocaleTimeString() }]);
+                history.push({ role: 'assistant', content: resp });
+                history.push({ role: 'user', content: `Tool Result: ${res}` });
+                continue;
+              }
+            } catch {}
+          }
+          if (resp.includes('تمت المهمة') || resp.includes('FINISH')) break;
         }
-        if (resp.includes('تمت المهمة') || resp.includes('FINISH')) break;
       }
     } catch (e) {
       setAgentSteps(p => [...p, { id: 'err', role: 'system', content: '❌ خطأ: ' + e.message, ts: new Date().toLocaleTimeString() }]);
@@ -779,7 +803,14 @@ export default function App() {
           setChatInput('');
           setChatLoading(true);
           try {
-            const resp = await callGroq([...msgs, userMsg].map(m => ({ role: m.role, content: m.content })));
+            let resp;
+            if (keys.SERVER) {
+              const allMsgs = [...msgs, userMsg].map(m => ({ role: m.role, content: m.content }));
+              const result = await callServer({ messages: allMsgs, mode: 'chat' });
+              resp = result.content;
+            } else {
+              resp = await callGroq([...msgs, userMsg].map(m => ({ role: m.role, content: m.content })));
+            }
             setMsgs(p => [...p, { id: 'a'+Date.now(), role: 'assistant', content: resp, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
           } catch (e) { Alert.alert('Error', e.message); }
           finally { setChatLoading(false); }
@@ -846,8 +877,18 @@ export default function App() {
       <GBtn label="تحليل الصورة" icon="eye" colors={[C.pink, '#d946ef']} onPress={async () => {
         if (!visImg) return Alert.alert('Error', 'اختر صورة أولاً');
         setVisLoading(true); setVisResult('');
-        const res = await tools.analyze_image({ url: `data:${visImg.mimeType || 'image/jpeg'};base64,${visImg.base64}`, question: visPrompt });
-        setVisResult(res); setVisLoading(false);
+        try {
+          let res;
+          if (keys.SERVER) {
+            const imgUrl = `data:${visImg.mimeType || 'image/jpeg'};base64,${visImg.base64}`;
+            const result = await callServer({ messages: [{ role: 'user', content: visPrompt }], imageUrl: imgUrl, mode: 'vision' });
+            res = result.content;
+          } else {
+            res = await tools.analyze_image({ url: `data:${visImg.mimeType || 'image/jpeg'};base64,${visImg.base64}`, question: visPrompt });
+          }
+          setVisResult(res);
+        } catch(e) { setVisResult('خطأ: ' + e.message); }
+        setVisLoading(false);
       }} disabled={visLoading} />
       {visLoading && <ActivityIndicator color={C.pink} style={{ marginTop: 20 }} />}
       {visResult ? <Glass style={{ marginTop: 20, padding: 15 }}><Text style={S.visRes}>{visResult}</Text></Glass> : null}
@@ -857,6 +898,22 @@ export default function App() {
   const renderVault = () => (
     <ScrollView style={S.tabContent}>
       <Text style={S.tabTitle}>Security Vault</Text>
+      <View style={{ marginBottom: 20 }}>
+        <Text style={S.vaultLabel}>🌐 NEBULA Server URL (السيرفر الأصلي)</Text>
+        <TextInput
+          style={[S.vaultInput, keys.SERVER ? { borderColor: C.green + '88' } : {}]}
+          value={keys.SERVER}
+          onChangeText={v => saveKey('SERVER_URL', v)}
+          placeholder="https://your-app.replit.app"
+          autoCapitalize="none"
+          keyboardType="url"
+        />
+        {keys.SERVER ? (
+          <Text style={{ color: C.green, fontSize: 11, marginTop: 4, marginLeft: 5 }}>✅ متصل بالسيرفر — الوكيل يعمل بشكل دائم</Text>
+        ) : (
+          <Text style={{ color: C.gray, fontSize: 11, marginTop: 4, marginLeft: 5 }}>ادخل رابط السيرفر لتفعيل الوكيل الكامل</Text>
+        )}
+      </View>
       <View style={{ marginBottom: 20 }}>
         <Text style={S.vaultLabel}>GitHub Personal Token</Text>
         <TextInput
@@ -889,8 +946,8 @@ export default function App() {
       </View>
       <GBtn label="حفظ وتشفير" icon="shield-checkmark" onPress={() => Alert.alert('Success', 'تم حفظ المفاتيح بنجاح')} />
       <View style={{ marginTop: 40, alignItems: 'center' }}>
-        <Text style={{ color: C.gray, fontSize: 12 }}>NEBULA STUDIO PRO v2.5</Text>
-        <Text style={{ color: C.grayDark, fontSize: 10, marginTop: 5 }}>RSA-4096 ENCRYPTION ACTIVE</Text>
+        <Text style={{ color: C.gray, fontSize: 12 }}>NEBULA STUDIO PRO v3.0</Text>
+        <Text style={{ color: C.grayDark, fontSize: 10, marginTop: 5 }}>RSA-4096 · NEBULA SERVER ACTIVE</Text>
       </View>
     </ScrollView>
   );
@@ -908,7 +965,7 @@ export default function App() {
           <Text style={S.headerTitle}>NEBULA</Text>
           <View style={S.statusRow}>
             <PulseDot color={C.green} size={6} />
-            <Text style={S.headerSub}> PRO v2.5 · ONLINE</Text>
+            <Text style={S.headerSub}> PRO v3.0 · SERVER</Text>
           </View>
         </View>
         <TouchableOpacity style={S.modelBtn}>
