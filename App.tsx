@@ -1,1201 +1,1277 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-  import {
-    StyleSheet,
-    View,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    ScrollView,
-    Image,
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    Dimensions,
-    Animated,
-    StatusBar,
-    Alert,
-    Modal,
-    FlatList,
-    Pressable,
-    Linking,
-    Share,
-  } from 'react-native';
-  import { LinearGradient } from 'expo-linear-gradient';
-  import * as ImagePicker from 'expo-image-picker';
-  import * as SecureStore from 'expo-secure-store';
-  import { Ionicons, MaterialCommunityIcons, FontAwesome5, Feather } from '@expo/vector-icons';
-  import { BlurView } from 'expo-blur';
+import {
+  StyleSheet, View, Text, TextInput, TouchableOpacity,
+  ScrollView, Image, ActivityIndicator, KeyboardAvoidingView,
+  Platform, SafeAreaView, Dimensions, Animated, StatusBar,
+  Alert, Modal, FlatList, Pressable, Linking, Share,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
+import * as SecureStore from 'expo-secure-store';
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 
-  const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
-  /**
-   * NEBULA STUDIO PRO - ULTIMATE AI WORKSPACE
-   * Designed for High-Performance Autonomous Operations
-   */
+// ═══════════════════════════════════════════════
+//  NEBULA STUDIO PRO — ULTIMATE AI AGENT
+//  24 Tools · Visual Thinking · Self-Browsing
+// ═══════════════════════════════════════════════
 
-  // --- CONSTANTS ---
-  const THEME = {
-    background: '#050508',
-    card: 'rgba(255, 255, 255, 0.04)',
-    cardBorder: 'rgba(255, 255, 255, 0.08)',
-    primary: '#7c3aed',
-    primaryGlow: '#4f46e5',
-    secondary: '#0ea5e9',
-    secondaryGlow: '#06b6d4',
-    accent: '#14b8a6',
-    text: '#ffffff',
-    textSecondary: '#94a3b8',
-    error: '#ef4444',
-    success: '#22c55e',
-  };
+const C = {
+  bg: '#03010a',
+  bg2: '#07030f',
+  glass: 'rgba(255,255,255,0.04)',
+  glassBorder: 'rgba(255,255,255,0.09)',
+  purple: '#8b5cf6',
+  purpleDark: '#6d28d9',
+  purpleGlow: 'rgba(139,92,246,0.3)',
+  blue: '#3b82f6',
+  blueDark: '#1d4ed8',
+  cyan: '#06b6d4',
+  teal: '#14b8a6',
+  pink: '#ec4899',
+  gold: '#f59e0b',
+  white: '#ffffff',
+  gray: '#94a3b8',
+  grayDark: '#475569',
+  green: '#22c55e',
+  red: '#ef4444',
+  orange: '#f97316',
+};
 
-  const MODELS = [
-    { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', name: 'Llama 4 Maverick', icon: 'rocket' },
-    { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'Llama 4 Scout', icon: 'search' },
-    { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1', icon: 'brain' },
-    { id: 'qwen-qwq-32b', name: 'QwQ 32B', icon: 'comment-dots' },
-    { id: 'llama-3.2-90b-vision-preview', name: 'Vision 90B', icon: 'eye' },
-    { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', icon: 'layers' },
-  ];
+const MODELS = [
+  { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', name: 'Llama 4 Maverick', icon: 'rocket-outline', color: C.purple },
+  { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'Llama 4 Scout', icon: 'telescope-outline', color: C.blue },
+  { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1', icon: 'bulb-outline', color: C.cyan },
+  { id: 'qwen-qwq-32b', name: 'QwQ 32B', icon: 'infinite-outline', color: C.teal },
+  { id: 'llama-3.2-90b-vision-preview', name: 'Vision 90B', icon: 'eye-outline', color: C.pink },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3', icon: 'layers-outline', color: C.gold },
+];
 
-  const FALLBACK_MODELS = [
-    'meta-llama/llama-4-maverick-17b-128e-instruct',
-    'meta-llama/llama-4-scout-17b-16e-instruct',
-    'deepseek-r1-distill-llama-70b',
-    'qwen-qwq-32b',
-    'llama-3.3-70b-versatile',
-  ];
+const TABS = [
+  { id: 'Agent', icon: 'hardware-chip-outline', label: 'Agent', color: C.purple },
+  { id: 'Chat', icon: 'chatbubbles-outline', label: 'Chat', color: C.blue },
+  { id: 'Vision', icon: 'eye-outline', label: 'Vision', color: C.pink },
+  { id: 'Search', icon: 'search-outline', label: 'Search', color: C.cyan },
+  { id: 'Create', icon: 'color-palette-outline', label: 'Create', color: C.gold },
+  { id: 'Build', icon: 'code-slash-outline', label: 'Build', color: C.teal },
+  { id: 'Vault', icon: 'lock-closed-outline', label: 'Vault', color: C.orange },
+];
 
-  // --- ANIMATED BACKGROUND COMPONENTS ---
+// ─── STAR FIELD ──────────────────────────────────
+const STARS = Array.from({ length: 120 }, (_, i) => ({
+  id: i,
+  x: Math.random() * 100,
+  y: Math.random() * 100,
+  size: 0.8 + Math.random() * 2.2,
+  opacity: 0.3 + Math.random() * 0.7,
+  dur: 2500 + Math.random() * 5000,
+}));
 
-  const StarField = () => {
-    const stars = useMemo(() => [{"id":0,"size":1.907324325055817,"x":35.050717289395884,"y":29.805187966272584,"opacity":0.8580796832933582,"duration":4775.178464854356},{"id":1,"size":1.781199041026265,"x":21.68118621600188,"y":23.03240813926173,"opacity":0.413401305507771,"duration":4465.423139653571},{"id":2,"size":2.280704342728921,"x":86.00350234857679,"y":70.4753374535071,"opacity":0.9001783478418826,"duration":4732.210227565976},{"id":3,"size":1.5176597685598323,"x":48.38410395786064,"y":87.22659232214507,"opacity":0.3445357077712048,"duration":3219.26164122531},{"id":4,"size":2.418606472981928,"x":54.14596009118113,"y":4.9829507145225715,"opacity":0.912369602350072,"duration":2968.2429456311},{"id":5,"size":2.426682528055883,"x":26.6644314049018,"y":50.50814689934147,"opacity":0.5300514575210462,"duration":4763.457505148049},{"id":6,"size":2.239409716181638,"x":16.837851630177237,"y":10.411115693839745,"opacity":0.4531374367031348,"duration":4052.4891207648543},{"id":7,"size":1.212096106267746,"x":13.09160690349611,"y":71.42217813259353,"opacity":0.7973651164596045,"duration":3362.6796484224287},{"id":8,"size":1.2041165489229657,"x":1.480191090823757,"y":72.4555924807652,"opacity":0.9380244766930459,"duration":2728.42732538235},{"id":9,"size":1.1239959827012522,"x":47.7651512106398,"y":29.374185142449626,"opacity":0.9594848290727438,"duration":4666.641562071949},{"id":10,"size":1.8517433401669257,"x":77.96995980068237,"y":10.069497830585616,"opacity":0.9691223880436579,"duration":4289.724652752154},{"id":11,"size":2.7512528523802255,"x":82.1433060343676,"y":72.87296694384817,"opacity":0.6237210373631509,"duration":4975.653836048688},{"id":12,"size":1.1748854200612668,"x":30.469544490634213,"y":79.64103908807476,"opacity":0.7234103185393195,"duration":2725.125345659026},{"id":13,"size":2.626237980150955,"x":7.820808598817353,"y":82.82370642607131,"opacity":0.5233007190563294,"duration":3484.4235112323827},{"id":14,"size":1.3127570217832165,"x":0.8487383165203477,"y":28.848473913673047,"opacity":0.9384711080115757,"duration":2366.3932381693776},{"id":15,"size":2.171188209051307,"x":71.05166014783512,"y":24.31566855857501,"opacity":0.30039090905236404,"duration":3347.537982603584},{"id":16,"size":1.852615624649058,"x":97.81763431203998,"y":25.276599451592396,"opacity":0.7251992453602081,"duration":3409.769644227248},{"id":17,"size":1.0747985638379753,"x":29.50402769964031,"y":64.42012670436515,"opacity":0.6052331629027448,"duration":4502.1173192001515},{"id":18,"size":2.9755159085569085,"x":58.15827537966054,"y":34.63385331392577,"opacity":0.5624221091121315,"duration":4622.981850772603},{"id":19,"size":1.7607531261575025,"x":76.3207851826307,"y":69.58208159208834,"opacity":0.5049255208041308,"duration":2650.9119784821924},{"id":20,"size":1.0779076707623814,"x":59.003647114011734,"y":16.16185566742525,"opacity":0.9130067179631634,"duration":2084.1705105766573},{"id":21,"size":2.14751898299571,"x":91.54722092561462,"y":97.76994599801259,"opacity":0.4669786361612743,"duration":2452.07269738759},{"id":22,"size":2.1859475488873454,"x":50.53048357467289,"y":96.91287260004377,"opacity":0.5816184467664702,"duration":3019.0859251772963},{"id":23,"size":2.954997966265841,"x":10.1660336740943,"y":96.31571875256581,"opacity":0.8705910998219344,"duration":2897.2237408292685},{"id":24,"size":2.6343594315058882,"x":27.211676167582578,"y":43.84817950701512,"opacity":0.9740517895641896,"duration":4439.108731524862},{"id":25,"size":2.7956747445031707,"x":68.89166262249296,"y":94.57538908331682,"opacity":0.8259870476451627,"duration":4596.507049840906},{"id":26,"size":2.5662149989087144,"x":24.032427763059783,"y":79.76848156126228,"opacity":0.6481890071330672,"duration":4135.355241593276},{"id":27,"size":1.0622331635926523,"x":73.3006362990376,"y":82.85595664295566,"opacity":0.8259048677760681,"duration":3081.6799216268937},{"id":28,"size":2.6167767820147025,"x":57.72185332533819,"y":86.66611318107947,"opacity":0.6346384338711816,"duration":3586.986945216471},{"id":29,"size":1.0965490204626662,"x":32.32891382442882,"y":64.48639610558115,"opacity":0.6830965922486356,"duration":2645.984691657793},{"id":30,"size":2.886735985541546,"x":35.99092488806328,"y":38.16162105983734,"opacity":0.3791528572153776,"duration":3294.5871621827364},{"id":31,"size":1.2055138133156889,"x":45.967328623358775,"y":86.84099548032289,"opacity":0.5546617001344207,"duration":4867.715764465056},{"id":32,"size":2.9925301881721302,"x":27.015248620180344,"y":43.02069935981378,"opacity":0.5892124155369096,"duration":4690.361458516584},{"id":33,"size":2.4674888174116805,"x":13.972920062973305,"y":41.32710629483785,"opacity":0.34225858330818515,"duration":4244.658773578241},{"id":34,"size":2.0095341669193236,"x":55.39800763991123,"y":66.47084535863577,"opacity":0.9197183537022475,"duration":3702.965563878359},{"id":35,"size":1.3561519071383734,"x":95.81691905731402,"y":5.478117253784287,"opacity":0.7553313799441508,"duration":4091.590919025878},{"id":36,"size":2.064509776185302,"x":68.1977698892873,"y":55.810769285012896,"opacity":0.9863477230202582,"duration":4317.9191427761325},{"id":37,"size":2.192005312397168,"x":0.9174629582930249,"y":12.38482620068282,"opacity":0.7035459148373223,"duration":4419.797870835764},{"id":38,"size":2.6935352135250286,"x":74.84234166917054,"y":51.99609856380511,"opacity":0.43263296215613645,"duration":2451.066938989616},{"id":39,"size":1.081611183060779,"x":21.795047622439622,"y":68.31665725289466,"opacity":0.7245384224220099,"duration":2115.4509435684968},{"id":40,"size":1.5654387129200487,"x":66.45686531470632,"y":85.48496033008426,"opacity":0.8861204452211682,"duration":4423.066768265629},{"id":41,"size":2.8448610200816424,"x":83.31605157195894,"y":15.050519998835,"opacity":0.3374184960825646,"duration":3967.383700596854},{"id":42,"size":1.3144453786770343,"x":37.86189477849868,"y":72.13210987298402,"opacity":0.8616203376987019,"duration":3883.772909805217},{"id":43,"size":1.773885502326228,"x":3.3000921721096255,"y":6.768554178406383,"opacity":0.987214901350786,"duration":2165.4972640678043},{"id":44,"size":1.1138679942780718,"x":67.48385039651987,"y":65.62992382430772,"opacity":0.8153611546870203,"duration":4770.692933460292},{"id":45,"size":1.1803427403881446,"x":54.1092806493439,"y":83.43729116191842,"opacity":0.9105584920553109,"duration":3254.094856569296},{"id":46,"size":1.2045661642961054,"x":72.04920991083881,"y":23.36964130204604,"opacity":0.6813192277144677,"duration":3525.4009476177225},{"id":47,"size":1.9114884119097155,"x":54.438787599105765,"y":74.11500524228482,"opacity":0.7532755258510221,"duration":3947.910216987625},{"id":48,"size":1.1244767702525342,"x":73.97224978634513,"y":64.14964304020405,"opacity":0.6004784606224924,"duration":2279.8795228199297},{"id":49,"size":1.6945593682131355,"x":21.53604590069349,"y":16.87348210044619,"opacity":0.7319680398980667,"duration":4914.350380847587},{"id":50,"size":2.408109859993184,"x":14.787702697395488,"y":81.40975542179308,"opacity":0.499744119179647,"duration":4342.2609698924625},{"id":51,"size":2.7497597496676778,"x":55.30170899397935,"y":10.756925208833955,"opacity":0.8004016507287777,"duration":2037.6373600380591},{"id":52,"size":1.6186389877436644,"x":66.64265275530245,"y":97.82852082388938,"opacity":0.322911768211342,"duration":2903.90184410095},{"id":53,"size":1.2647801382969943,"x":64.79949695723255,"y":10.148365701792471,"opacity":0.8318832929371129,"duration":2696.9530135829173},{"id":54,"size":2.7973337470982917,"x":45.40061547012482,"y":86.47737872510031,"opacity":0.6739127746464231,"duration":2605.3443194437205},{"id":55,"size":1.1945926285736488,"x":74.12838444784668,"y":40.143725457968536,"opacity":0.6448650898347119,"duration":2627.6988423827747},{"id":56,"size":2.0507123004156718,"x":45.44162488185861,"y":30.39539753930738,"opacity":0.8576776460208495,"duration":3555.3751027032736},{"id":57,"size":2.9050855008649576,"x":19.16010707729503,"y":7.606563795067123,"opacity":0.3890498528376003,"duration":3441.2350483414284},{"id":58,"size":1.4870487192926225,"x":31.798828663217304,"y":38.48924700729799,"opacity":0.6638306498601386,"duration":2111.6571175033687},{"id":59,"size":1.1934594104930603,"x":7.374561002619595,"y":39.18037928797054,"opacity":0.5658049064307406,"duration":4489.6170436986995},{"id":60,"size":1.701442938819394,"x":37.017712903941245,"y":48.04355492649184,"opacity":0.4406769590032255,"duration":4411.132207257213},{"id":61,"size":1.716118858447996,"x":25.540779133024415,"y":79.98747630321436,"opacity":0.6316465222526297,"duration":2929.712288332512},{"id":62,"size":1.566388486313826,"x":38.8401316604261,"y":91.1380262232428,"opacity":0.905194954755816,"duration":3137.5346180316446},{"id":63,"size":2.987843098308939,"x":71.94854204136327,"y":66.32493657725725,"opacity":0.8389764406853559,"duration":3986.4353313988013},{"id":64,"size":1.7271616920379547,"x":5.55115913294788,"y":62.23872659926399,"opacity":0.46657170945451676,"duration":4987.562905958079},{"id":65,"size":1.3662776769812557,"x":96.3623899329883,"y":90.77377543795669,"opacity":0.4699333059916203,"duration":4991.591510894736},{"id":66,"size":2.7824862350429216,"x":5.812657880913519,"y":12.986109217859054,"opacity":0.8380587867320148,"duration":2502.94237454292},{"id":67,"size":2.047237731661845,"x":67.23562483654113,"y":17.988217067750135,"opacity":0.42332072003239896,"duration":3334.9398788959415},{"id":68,"size":1.0605533972395649,"x":98.96081143466256,"y":81.21656428496118,"opacity":0.3759707109156236,"duration":4372.381371901996},{"id":69,"size":2.6897192093938225,"x":90.28509804502029,"y":49.71564114898608,"opacity":0.6616846891541928,"duration":4463.697371868348},{"id":70,"size":1.1874621524742661,"x":11.571214737641,"y":26.459613901734656,"opacity":0.7745779474135874,"duration":4451.185433797581},{"id":71,"size":2.8121146218281976,"x":1.8067979475123286,"y":24.210177299634417,"opacity":0.6434314475089306,"duration":3099.2315230161535},{"id":72,"size":2.4397810922189893,"x":47.39967122732256,"y":52.758267804652846,"opacity":0.49601497751504586,"duration":3604.949575376519},{"id":73,"size":2.1759820821357727,"x":77.8077465136722,"y":63.49005639758476,"opacity":0.6509412408406043,"duration":2663.34309437927},{"id":74,"size":2.966060462776777,"x":51.00618906692973,"y":32.904829691695795,"opacity":0.531031698908278,"duration":3036.57913609565},{"id":75,"size":1.4340050774801485,"x":58.13214756351268,"y":84.99440526534198,"opacity":0.6767273112936597,"duration":4716.638463794768},{"id":76,"size":2.915138866013491,"x":12.330294278645937,"y":96.13305463758073,"opacity":0.5306255005807183,"duration":3164.4337490317566},{"id":77,"size":1.4291172045338296,"x":24.945717045266846,"y":59.543091867648016,"opacity":0.6029218019148368,"duration":2223.967992321765},{"id":78,"size":1.8262677379820302,"x":98.34780102147076,"y":58.18086895000085,"opacity":0.5043285373074573,"duration":2609.8545486021003},{"id":79,"size":2.5250319815519857,"x":0.7396693738903837,"y":73.42625228489015,"opacity":0.8180556679092044,"duration":3102.5693462171757}], []);
-    
-    return (
-      <View style={StyleSheet.absoluteFill}>
-        {stars.map((star) => (
-          <Star key={star.id} {...star} />
-        ))}
-      </View>
-    );
-  };
+const StarBed = React.memo(() => (
+  <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    {STARS.map(s => <StarDot key={s.id} {...s} />)}
+  </View>
+));
 
-  const Star = ({ size, x, y, opacity, duration }) => {
-    const anim = useRef(new Animated.Value(0)).current;
+const StarDot = React.memo(({ x, y, size, opacity, dur }) => {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(Animated.sequence([
+      Animated.timing(a, { toValue: 1, duration: dur, useNativeDriver: true }),
+      Animated.timing(a, { toValue: 0, duration: dur, useNativeDriver: true }),
+    ])).start();
+  }, []);
+  return (
+    <Animated.View style={{
+      position: 'absolute', left: `${x}%`, top: `${y}%`,
+      width: size, height: size, borderRadius: size,
+      backgroundColor: '#fff',
+      opacity: a.interpolate({ inputRange: [0, 1], outputRange: [opacity * 0.2, opacity] }),
+    }} />
+  );
+});
 
-    useEffect(() => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(anim, { toValue: 1, duration, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0, duration, useNativeDriver: true }),
-        ])
-      ).start();
-    }, []);
+// ─── NEBULA ORBS ─────────────────────────────────
+const NebulaOrbs = React.memo(() => {
+  const a1 = useRef(new Animated.Value(0)).current;
+  const a2 = useRef(new Animated.Value(0)).current;
+  const a3 = useRef(new Animated.Value(0)).current;
+  const a4 = useRef(new Animated.Value(0)).current;
 
-    const alpha = anim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [opacity * 0.3, opacity],
-    });
+  useEffect(() => {
+    const loop = (v, d) => Animated.loop(Animated.sequence([
+      Animated.timing(v, { toValue: 1, duration: d, useNativeDriver: true }),
+      Animated.timing(v, { toValue: 0, duration: d, useNativeDriver: true }),
+    ])).start();
+    loop(a1, 9000); loop(a2, 13000); loop(a3, 7000); loop(a4, 11000);
+  }, []);
 
-    return (
-      <Animated.View
-        style={[
-          styles.star,
-          {
-            width: size,
-            height: size,
-            left: `${x}%`,
-            top: `${y}%`,
-            opacity: alpha,
-          },
-        ]}
-      />
-    );
-  };
-
-  const NebulaOrbs = () => {
-    const orb1 = useRef(new Animated.Value(0)).current;
-    const orb2 = useRef(new Animated.Value(0)).current;
-    const orb3 = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-      const animate = (val, duration) => {
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(val, { toValue: 1, duration, useNativeDriver: true }),
-            Animated.timing(val, { toValue: 0, duration, useNativeDriver: true }),
-          ])
-        ).start();
-      };
-      animate(orb1, 8000);
-      animate(orb2, 12000);
-      animate(orb3, 10000);
-    }, []);
-
-    const t1 = orb1.interpolate({ inputRange: [0, 1], outputRange: [-50, 50] });
-    const r1 = orb1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.2] });
-
-    const t2 = orb2.interpolate({ inputRange: [0, 1], outputRange: [50, -50] });
-    const r2 = orb2.interpolate({ inputRange: [0, 1], outputRange: [1.2, 0.9] });
-
-    const t3 = orb3.interpolate({ inputRange: [0, 1], outputRange: [0, 100] });
-    const r3 = orb3.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.1] });
-
-    return (
-      <View style={StyleSheet.absoluteFill}>
-        <Animated.View style={[styles.orb, { backgroundColor: THEME.primary, top: '20%', left: '10%', opacity: 0.2, transform: [{ translateX: t1 }, { scale: r1 }] }]} />
-        <Animated.View style={[styles.orb, { backgroundColor: THEME.secondary, bottom: '20%', right: '10%', opacity: 0.15, transform: [{ translateX: t2 }, { scale: r2 }] }]} />
-        <Animated.View style={[styles.orb, { backgroundColor: THEME.accent, top: '50%', left: '40%', opacity: 0.1, transform: [{ translateY: t3 }, { scale: r3 }] }]} />
-      </View>
-    );
-  };
-
-  // --- HELPER COMPONENTS ---
-
-  const GlassCard = ({ children, style }) => (
-    <View style={[styles.glassCard, style]}>
-      <BlurView intensity={10} style={StyleSheet.absoluteFill} tint="dark" />
-      {children}
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Animated.View style={[S.orb, {
+        width: 380, height: 380, borderRadius: 190,
+        backgroundColor: C.purple, opacity: 0.12,
+        top: -80, left: -80,
+        transform: [{ translateX: a1.interpolate({ inputRange: [0, 1], outputRange: [0, 60] }) },
+                    { scale: a1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] }) }],
+      }]} />
+      <Animated.View style={[S.orb, {
+        width: 320, height: 320, borderRadius: 160,
+        backgroundColor: C.blue, opacity: 0.09,
+        bottom: -60, right: -60,
+        transform: [{ translateY: a2.interpolate({ inputRange: [0, 1], outputRange: [0, -80] }) },
+                    { scale: a2.interpolate({ inputRange: [0, 1], outputRange: [1.2, 0.9] }) }],
+      }]} />
+      <Animated.View style={[S.orb, {
+        width: 250, height: 250, borderRadius: 125,
+        backgroundColor: C.cyan, opacity: 0.07,
+        top: '40%', left: '30%',
+        transform: [{ translateX: a3.interpolate({ inputRange: [0, 1], outputRange: [-40, 60] }) },
+                    { translateY: a3.interpolate({ inputRange: [0, 1], outputRange: [30, -50] }) }],
+      }]} />
+      <Animated.View style={[S.orb, {
+        width: 200, height: 200, borderRadius: 100,
+        backgroundColor: C.pink, opacity: 0.06,
+        top: '20%', right: '10%',
+        transform: [{ translateY: a4.interpolate({ inputRange: [0, 1], outputRange: [0, 100] }) }],
+      }]} />
     </View>
   );
+});
 
-  const PremiumButton = ({ title, onPress, icon, style, loading }) => (
-    <TouchableOpacity onPress={onPress} disabled={loading} activeOpacity={0.8} style={[styles.btnContainer, style]}>
-      <LinearGradient colors={[THEME.primary, THEME.primaryGlow]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.btnGradient}>
-        {loading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <View style={styles.btnContent}>
-            {icon && <Ionicons name={icon} size={20} color="#fff" style={{ marginRight: 8 }} />}
-            <Text style={styles.btnText}>{title}</Text>
-          </View>
-        )}
-      </LinearGradient>
-    </TouchableOpacity>
-  );
+// ─── GLASS CARD ──────────────────────────────────
+const Glass = ({ children, style, glow }) => (
+  <View style={[S.glass, glow && { borderColor: glow, shadowColor: glow, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 }, style]}>
+    {children}
+  </View>
+);
 
-  const ShimmerLoading = () => {
-    const anim = useRef(new Animated.Value(0)).current;
-    useEffect(() => {
-      Animated.loop(Animated.timing(anim, { toValue: 1, duration: 1500, useNativeDriver: true })).start();
-    }, []);
-    const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [-width, width] });
-    return (
-      <View style={styles.shimmerBox}>
-        <Animated.View style={[styles.shimmerLine, { transform: [{ translateX }] }]}>
-          <LinearGradient colors={['transparent', 'rgba(255,255,255,0.1)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
-        </Animated.View>
-      </View>
-    );
+// ─── GRADIENT BUTTON ─────────────────────────────
+const GBtn = ({ onPress, colors = [C.purple, C.purpleDark], icon, label, style, disabled, small }) => (
+  <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.75} style={[S.gbtnWrap, small && { height: 38, borderRadius: 19 }, style]}>
+    <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[S.gbtnInner, small && { borderRadius: 19 }]}>
+      {icon && <Ionicons name={icon} size={small ? 16 : 20} color="#fff" style={{ marginRight: 6 }} />}
+      <Text style={[S.gbtnText, small && { fontSize: 13 }]}>{label}</Text>
+    </LinearGradient>
+  </TouchableOpacity>
+);
+
+// ─── PULSE DOT ───────────────────────────────────
+const PulseDot = ({ color = C.purple, size = 10 }) => {
+  const a = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.loop(Animated.sequence([
+      Animated.timing(a, { toValue: 0.3, duration: 700, useNativeDriver: true }),
+      Animated.timing(a, { toValue: 1, duration: 700, useNativeDriver: true }),
+    ])).start();
+  }, []);
+  return <Animated.View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color, opacity: a }} />;
+};
+
+// ─── TYPE BADGE ──────────────────────────────────
+const Badge = ({ label, color }) => (
+  <View style={{ backgroundColor: color + '22', borderWidth: 1, borderColor: color + '55', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+    <Text style={{ color, fontSize: 10, fontWeight: '700', letterSpacing: 1 }}>{label}</Text>
+  </View>
+);
+
+// ════════════════════════════════════════════════
+//  MAIN APP
+// ════════════════════════════════════════════════
+
+export default function App() {
+  const [tab, setTab] = useState('Agent');
+  const [model, setModel] = useState(MODELS[0].id);
+  const [keys, setKeys] = useState({});
+  const [showVaultModal, setShowVaultModal] = useState(false);
+  const groqIdx = useRef(0);
+
+  // Chat
+  const [msgs, setMsgs] = useState([
+    { id: '0', role: 'assistant', content: '🌌 أهلاً بك في NEBULA STUDIO PRO\n\nأنا وكيل ذكاء اصطناعي قادر على:\n• تصفح الإنترنت بنفسي\n• تحليل الصور والتفكير البصري\n• كتابة وتنفيذ الكود\n• 24 أداة احترافية\n\nما الذي تريده اليوم؟' }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+
+  // Agent
+  const [agentGoal, setAgentGoal] = useState('');
+  const [agentSteps, setAgentSteps] = useState([]);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentMemory, setAgentMemory] = useState({});
+
+  // Vision
+  const [visImg, setVisImg] = useState(null);
+  const [visResult, setVisResult] = useState('');
+  const [visLoading, setVisLoading] = useState(false);
+  const [visPrompt, setVisPrompt] = useState('حلّل هذه الصورة بتفصيل كامل وأخبرني كل ما تراه');
+
+  // Search
+  const [srchQ, setSrchQ] = useState('');
+  const [srchResults, setSrchResults] = useState([]);
+  const [srchLoading, setSrchLoading] = useState(false);
+
+  // Create
+  const [createPrompt, setCreatePrompt] = useState('');
+  const [createImg, setCreateImg] = useState(null);
+  const [storyboard, setStoryboard] = useState(null);
+  const [createLoading, setCreateLoading] = useState(false);
+
+  // Build
+  const [buildPrompt, setBuildPrompt] = useState('');
+  const [buildCode, setBuildCode] = useState('');
+  const [buildLoading, setBuildLoading] = useState(false);
+  const [commitUrl, setCommitUrl] = useState('');
+
+  const chatScroll = useRef(null);
+  const agentScroll = useRef(null);
+
+  useEffect(() => { loadKeys(); }, []);
+
+  // ─── KEYS ───────────────────────────────────────
+  const loadKeys = async () => {
+    try {
+      const k = {
+        GITHUB: await SecureStore.getItemAsync('GITHUB') || process.env.EXPO_PUBLIC_GITHUB_TOKEN || '',
+        JINA: await SecureStore.getItemAsync('JINA') || '',
+        GROQ_OVR: await SecureStore.getItemAsync('GROQ_OVR') || '',
+      };
+      setKeys(k);
+    } catch {}
   };
 
-  // --- MAIN APP ---
+  const saveKey = async (k, v) => {
+    await SecureStore.setItemAsync(k, v);
+    setKeys(p => ({ ...p, [k]: v }));
+  };
 
-  export default function App() {
-    const [activeTab, setActiveTab] = useState('Chat');
-    const [messages, setMessages] = useState([]);
-    const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
-    const [keys, setKeys] = useState({});
-    const [showVault, setShowVault] = useState(false);
-    
-    // Agent State
-    const [agentGoal, setAgentGoal] = useState('');
-    const [agentSteps, setAgentSteps] = useState([]);
-    const [agentRunning, setAgentRunning] = useState(false);
-    const [agentMemory, setAgentMemory] = useState({});
-    const [agentHistory, setAgentHistory] = useState([]);
+  // ─── GROQ API ───────────────────────────────────
+  const getGroqKey = (n) => {
+    if (keys.GROQ_OVR) return keys.GROQ_OVR;
+    return process.env['EXPO_PUBLIC_GROQ_KEY_' + ((n % 7) + 1)] || '';
+  };
 
-    // Vision State
-    const [visionImage, setVisionImage] = useState(null);
-    const [visionResult, setVisionResult] = useState('');
-
-    // Search State
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState([]);
-
-    // Create State
-    const [createPrompt, setCreatePrompt] = useState('');
-    const [creationImage, setCreationImage] = useState(null);
-    const [storyboard, setStoryboard] = useState(null);
-
-    // Build State
-    const [buildPrompt, setBuildPrompt] = useState('');
-    const [buildCode, setBuildCode] = useState('');
-    const [lastCommitUrl, setLastCommitUrl] = useState('');
-
-    const groqIndex = useRef(0);
-    const scrollRef = useRef();
-
-    useEffect(() => {
-      loadKeys();
-    }, []);
-
-    const loadKeys = async () => {
+  const callGroq = async (messages, mdl = null, maxTokens = 4096) => {
+    groqIdx.current = (groqIdx.current + 1) % 7;
+    const base = groqIdx.current;
+    let lastErr;
+    for (let t = 0; t < 7; t++) {
+      const key = getGroqKey(base + t);
+      if (!key) continue;
       try {
-        const savedKeys = {
-          GITHUB_TOKEN: await SecureStore.getItemAsync('GITHUB_TOKEN') || process.env.EXPO_PUBLIC_GITHUB_TOKEN,
-          JINA_KEY: await SecureStore.getItemAsync('JINA_KEY'),
-          GROQ_OVERRIDE: await SecureStore.getItemAsync('GROQ_OVERRIDE'),
-        };
-        setKeys(savedKeys);
-        if (!savedKeys.GITHUB_TOKEN) setShowVault(true);
-      } catch (e) {
-        console.error('Keys load error', e);
-      }
-    };
-
-    const saveKey = async (key, val) => {
-      await SecureStore.setItemAsync(key, val);
-      setKeys(prev => ({ ...prev, [key]: val }));
-    };
-
-    const getGroqKey = (index) => {
-      if (keys.GROQ_OVERRIDE) return keys.GROQ_OVERRIDE;
-      const n = (index % 7) + 1;
-      return process.env['EXPO_PUBLIC_GROQ_KEY_' + n] || '';
-    };
-
-    const callGroq = async (prompt, model, history = [], system = '') => {
-      // كل رسالة تنتقل للمفتاح التالي مرة واحدة فقط
-      groqIndex.current = (groqIndex.current + 1) % 7;
-      const base = groqIndex.current;
-      let lastError;
-
-      for (let attempt = 0; attempt < 7; attempt++) {
-        const n = ((base + attempt) % 7) + 1;
-        const key = keys.GROQ_OVERRIDE || process.env['EXPO_PUBLIC_GROQ_KEY_' + n] || '';
-        if (!key) continue;
-        try {
-          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': 'Bearer ' + key,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model,
-              messages: [
-                ...(system ? [{ role: 'system', content: system }] : []),
-                ...history,
-                { role: 'user', content: prompt }
-              ],
-              temperature: 0.7,
-            }),
-          });
-          if (response.status === 429 || response.status === 401) {
-            const err = await response.json();
-            lastError = new Error(err.error?.message || 'Rate limit key ' + n);
-            continue;
-          }
-          if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error?.message || 'Groq API Error');
-          }
-          return await response.json();
-        } catch (e) {
-          const msg = e.message?.toLowerCase() || '';
-          if (msg.includes('rate') || msg.includes('limit') || msg.includes('quota') || msg.includes('429')) {
-            lastError = e;
-            continue;
-          }
-          throw e;
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: mdl || model, messages, temperature: 0.7, max_tokens: maxTokens }),
+        });
+        if (r.status === 429 || r.status === 401) {
+          lastErr = new Error('Key ' + (base + t) % 7 + 1 + ' rate limited');
+          continue;
         }
-      }
-      throw lastError || new Error('All 7 Groq keys exhausted');
-    };
-
-    // --- TAB: CHAT ---
-
-    const handleSend = async () => {
-      if (!input.trim() || loading) return;
-      const userMsg = { id: Date.now().toString(), role: 'user', content: input };
-      setMessages(prev => [...prev, userMsg]);
-      setInput('');
-      setLoading(true);
-
-      try {
-        const res = await callGroq(input, selectedModel, messages.map(m => ({ role: m.role, content: m.content })));
-        const aiMsg = { id: (Date.now() + 1).toString(), role: 'assistant', content: res.choices[0].message.content };
-        setMessages(prev => [...prev, aiMsg]);
+        if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || 'Groq error'); }
+        const d = await r.json();
+        return d.choices[0].message.content;
       } catch (e) {
-        Alert.alert('Error', e.message);
-      } finally {
-        setLoading(false);
+        if (e.message?.includes('rate') || e.message?.includes('limit')) { lastErr = e; continue; }
+        throw e;
       }
-    };
+    }
+    throw lastErr || new Error('جميع مفاتيح Groq استُنزفت');
+  };
 
-    // --- TAB: VISION ---
-
-    const pickVisionImage = async () => {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.5,
-        base64: true,
-      });
-      if (!result.canceled) setVisionImage(result.assets[0]);
-    };
-
-    const analyzeVision = async () => {
-      if (!visionImage || loading) return;
-      setLoading(true);
-      setVisionResult('');
+  // ─── 24 AGENT TOOLS ─────────────────────────────
+  const tools = useMemo(() => ({
+    // 1. تصفح الإنترنت - بحث
+    search_web: async ({ query }) => {
       try {
-        let lastError;
-        let result = null;
-        for (let attempt = 0; attempt < 7; attempt++) {
-          const currentIndex = groqIndex.current;
-          groqIndex.current++;
-          const key = getGroqKey(currentIndex);
-          if (!key) continue;
-          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: 'llama-3.2-90b-vision-preview',
-              messages: [{
-                role: 'user',
-                content: [
-                  { type: 'text', text: 'Analyze this image in extreme detail.' },
-                  { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + visionImage.base64 } }
-                ]
-              }]
-            })
-          });
-          if (res.status === 429 || res.status === 401) {
-            lastError = new Error('Rate limit on key ' + (currentIndex % 7 + 1));
-            continue;
-          }
-          if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error?.message || 'Vision API Error');
-          }
-          const data = await res.json();
-          result = data.choices[0].message.content;
-          break;
-        }
-        if (result) {
-          setVisionResult(result);
-        } else {
-          throw lastError || new Error('All 7 Groq keys exhausted');
-        }
-      } catch (e) {
-        Alert.alert('Vision Error', e.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // --- TAB: SEARCH ---
-
-    const handleSearch = async () => {
-      if (!searchQuery.trim() || loading) return;
-      setLoading(true);
-      setSearchResults([]);
-      try {
-        const r = await fetch('https://s.jina.ai/' + encodeURIComponent(searchQuery), {
+        const r = await fetch('https://s.jina.ai/' + encodeURIComponent(query), {
           headers: { 'Accept': 'application/json', 'X-Return-Format': 'markdown' }
         });
         const d = await r.json();
-        setSearchResults(d.data || []);
-      } catch (e) {
-        Alert.alert('Search Error', e.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+        const items = d.data?.slice(0, 5) || [];
+        return items.map((i, n) => `[${n+1}] ${i.title}\n${i.url}\n${i.content?.slice(0, 400)}`).join('\n\n') || JSON.stringify(d).slice(0, 2000);
+      } catch (e) { return 'فشل البحث: ' + e.message; }
+    },
 
-    // --- TAB: CREATE ---
-
-    const handleGenerateImage = () => {
-      if (!createPrompt.trim()) return;
-      const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(createPrompt) + '?width=1024&height=1024&nologo=true&seed=' + Date.now();
-      setCreationImage(url);
-    };
-
-    const handleStoryboard = async () => {
-      if (!createPrompt.trim() || loading) return;
-      setLoading(true);
+    // 2. جلب أي صفحة ويب
+    fetch_url: async ({ url }) => {
       try {
-        const res = await callGroq(`Create a 4-scene storyboard for: ${createPrompt}. Return JSON: [{"scene":1,"prompt":"..."},{"scene":2,"prompt":"..."}]`, 'meta-llama/llama-4-maverick-17b-128e-instruct');
-        const text = res.choices[0].message.content;
-        const scenes = JSON.parse(text.match(/\[[\s\S]*\]/)[0]);
-        setStoryboard(scenes.map(s => ({
-          ...s,
-          url: 'https://image.pollinations.ai/prompt/' + encodeURIComponent(s.prompt) + '?width=512&height=512&nologo=true&seed=' + Math.random()
-        })));
-      } catch (e) {
-        Alert.alert('Storyboard Error', e.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+        const r = await fetch('https://r.jina.ai/' + url, {
+          headers: { 'Accept': 'text/plain', 'X-Return-Format': 'markdown' }
+        });
+        return (await r.text()).slice(0, 4000);
+      } catch (e) { return 'فشل جلب الصفحة: ' + e.message; }
+    },
 
-    // --- TAB: BUILD ---
-
-    const handleBuild = async () => {
-      if (!buildPrompt.trim() || loading) return;
-      setLoading(true);
-      setBuildCode('');
+    // 3. الطقس
+    get_weather: async ({ city }) => {
       try {
-        const res = await callGroq(`Write a single-file React Native Expo App.tsx for: ${buildPrompt}. Return ONLY code, no markdown.`, 'meta-llama/llama-4-maverick-17b-128e-instruct');
-        const code = res.choices[0].message.content;
-        setBuildCode(code);
-        
-        if (keys.GITHUB_TOKEN) {
-          const repo = 'alhsryahmd266-jpg/ai-studio-apk';
-          const path = 'generated_app.tsx';
-          const msg = 'Build from Nebula Studio Pro';
-          
-          const shaRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, { headers: { Authorization: 'token ' + keys.GITHUB_TOKEN } });
-          const shaJson = await shaRes.json();
-          
-          const pushRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
-            method: 'PUT',
-            headers: { Authorization: 'token ' + keys.GITHUB_TOKEN, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: msg,
-              content: btoa(unescape(encodeURIComponent(code))),
-              ...(shaJson.sha ? { sha: shaJson.sha } : {})
-            })
-          });
-          const pushData = await pushRes.json();
-          if (pushData.commit) setLastCommitUrl(pushData.commit.html_url);
+        const r = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`);
+        const d = await r.json();
+        const c = d.current_condition[0];
+        const desc = c.weatherDesc[0].value;
+        return `🌤 ${city}: ${desc}\n🌡 ${c.temp_C}°C (يشعر بـ ${c.FeelsLikeC}°C)\n💧 رطوبة: ${c.humidity}%\n💨 رياح: ${c.windspeedKmph} كم/س`;
+      } catch (e) { return 'فشل جلب الطقس: ' + e.message; }
+    },
+
+    // 4. البحث في GitHub
+    search_github: async ({ query, type = 'repositories' }) => {
+      try {
+        const hdrs = { 'Accept': 'application/vnd.github+json' };
+        if (keys.GITHUB) hdrs['Authorization'] = 'token ' + keys.GITHUB;
+        const r = await fetch(`https://api.github.com/search/${type}?q=${encodeURIComponent(query)}&per_page=5`, { headers: hdrs });
+        const d = await r.json();
+        return (d.items || []).map(i =>
+          `📦 ${i.full_name || i.name}\n⭐ ${i.stargazers_count || 0} | ${i.description || ''}\n🔗 ${i.html_url}`
+        ).join('\n\n');
+      } catch (e) { return 'فشل بحث GitHub: ' + e.message; }
+    },
+
+    // 5. بناء تطبيق
+    build_app: async ({ description }) => {
+      try {
+        const code = await callGroq([
+          { role: 'system', content: 'أنت مطور React Native خبير. اكتب كود كامل قابل للتشغيل فوراً.' },
+          { role: 'user', content: 'اكتب App.tsx كاملاً لـ: ' + description + '\nأرجع الكود فقط بدون markdown.' }
+        ], 'meta-llama/llama-4-maverick-17b-128e-instruct', 8000);
+        return code.slice(0, 5000);
+      } catch (e) { return 'فشل البناء: ' + e.message; }
+    },
+
+    // 6. تحليل الكود
+    analyze_code: async ({ code, goal = 'review' }) => {
+      try {
+        const g = goal === 'debug' ? 'ابحث عن الأخطاء وأصلحها' : goal === 'improve' ? 'حسّن وطوّر' : 'راجع وقيّم';
+        return await callGroq([
+          { role: 'system', content: 'أنت مراجع كود خبير. قدّم تحليلاً دقيقاً ومفيداً.' },
+          { role: 'user', content: g + ':\n\n' + code.slice(0, 4000) }
+        ], 'deepseek-r1-distill-llama-70b');
+      } catch (e) { return 'فشل التحليل: ' + e.message; }
+    },
+
+    // 7. تنفيذ JavaScript
+    execute_code: async ({ code }) => {
+      try {
+        const fn = new Function(code);
+        const result = fn();
+        return String(result !== undefined ? result : 'تم التنفيذ بنجاح');
+      } catch (e) { return 'خطأ في التنفيذ: ' + e.message; }
+    },
+
+    // 8. إصلاح خطأ
+    fix_error: async ({ error, context = '' }) => {
+      try {
+        return await callGroq([
+          { role: 'system', content: 'أنت مصحح أخطاء خبير. قدّم الحل المباشر.' },
+          { role: 'user', content: `الخطأ: ${error}\n\nالسياق:\n${context}\n\nكيف أصلح هذا؟` }
+        ], 'deepseek-r1-distill-llama-70b');
+      } catch (e) { return 'فشل الإصلاح: ' + e.message; }
+    },
+
+    // 9. رفع ملف على GitHub
+    push_github: async ({ repo, path, content, message }) => {
+      try {
+        if (!keys.GITHUB) return '❌ GitHub token مطلوب — اذهب لـ Vault';
+        const shaRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+          headers: { Authorization: 'token ' + keys.GITHUB }
+        });
+        const shaData = await shaRes.json();
+        const body = { message, content: btoa(unescape(encodeURIComponent(content))) };
+        if (shaData.sha) body.sha = shaData.sha;
+        const r = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+          method: 'PUT',
+          headers: { Authorization: 'token ' + keys.GITHUB, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const d = await r.json();
+        return d.commit ? '✅ رُفع: ' + d.content.html_url : '❌ فشل: ' + JSON.stringify(d).slice(0, 300);
+      } catch (e) { return 'فشل الرفع: ' + e.message; }
+    },
+
+    // 10. قراءة ملف من GitHub
+    read_github_file: async ({ repo, path }) => {
+      try {
+        const hdrs = keys.GITHUB ? { Authorization: 'token ' + keys.GITHUB } : {};
+        const r = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, { headers: hdrs });
+        const d = await r.json();
+        if (d.content) return Buffer ? Buffer.from(d.content, 'base64').toString() : atob(d.content.replace(/\n/g, '')).slice(0, 3000);
+        return JSON.stringify(d).slice(0, 1000);
+      } catch (e) { return 'فشل القراءة: ' + e.message; }
+    },
+
+    // 11. قائمة ملفات GitHub
+    list_github_files: async ({ repo, dir = '' }) => {
+      try {
+        const hdrs = keys.GITHUB ? { Authorization: 'token ' + keys.GITHUB } : {};
+        const r = await fetch(`https://api.github.com/repos/${repo}/contents/${dir}`, { headers: hdrs });
+        const d = await r.json();
+        return (Array.isArray(d) ? d : []).map(f => `${f.type === 'dir' ? '📁' : '📄'} ${f.name} (${f.size || 0} bytes)`).join('\n');
+      } catch (e) { return 'فشل القائمة: ' + e.message; }
+    },
+
+    // 12. إنشاء issue على GitHub
+    create_github_issue: async ({ repo, title, body }) => {
+      try {
+        if (!keys.GITHUB) return '❌ GitHub token مطلوب';
+        const r = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+          method: 'POST',
+          headers: { Authorization: 'token ' + keys.GITHUB, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, body })
+        });
+        const d = await r.json();
+        return d.html_url ? '✅ Issue: ' + d.html_url : '❌ فشل: ' + JSON.stringify(d).slice(0, 300);
+      } catch (e) { return 'فشل إنشاء issue: ' + e.message; }
+    },
+
+    // 13. توليد صورة
+    generate_image: async ({ prompt }) => {
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`;
+      return `IMAGE:${url}`;
+    },
+
+    // 14. تحليل صورة (تفكير بصري)
+    analyze_image: async ({ url, question = 'ما الذي تراه في هذه الصورة؟' }) => {
+      try {
+        groqIdx.current = (groqIdx.current + 1) % 7;
+        const base = groqIdx.current;
+        let lastErr;
+        for (let t = 0; t < 7; t++) {
+          const key = getGroqKey(base + t);
+          if (!key) continue;
+          try {
+            const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'llama-3.2-90b-vision-preview',
+                messages: [{ role: 'user', content: [
+                  { type: 'text', text: question },
+                  { type: 'image_url', image_url: { url } }
+                ]}],
+                max_tokens: 2048,
+              })
+            });
+            if (r.status === 429 || r.status === 401) { lastErr = new Error('rate limit'); continue; }
+            const d = await r.json();
+            return d.choices[0].message.content;
+          } catch (e) { if (e.message?.includes('rate')) { lastErr = e; continue; } throw e; }
         }
-      } catch (e) {
-        Alert.alert('Build Error', e.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+        throw lastErr;
+      } catch (e) { return 'فشل تحليل الصورة: ' + e.message; }
+    },
 
-    // --- TAB: AGENT ---
-
-    const AGENT_SYSTEM = `You are an autonomous AI agent with 23 professional tools — same capabilities as the world's top AI agents.
-  You operate in a ReAct loop: Think → Act → Observe → Repeat.
-
-  TOOLS (call with exact syntax):
-  — WEB & DATA —
-    [TOOL: search_web       | {"query":"..."}]
-    [TOOL: fetch_url        | {"url":"https://..."}]
-    [TOOL: get_weather      | {"city":"Cairo"}]
-    [TOOL: search_github    | {"query":"...","type":"repositories"}]
-
-  — CODE & BUILD —
-    [TOOL: build_app        | {"description":"..."}]
-    [TOOL: analyze_code     | {"code":"...","goal":"review|improve|debug"}]
-    [TOOL: execute_code     | {"code":"..."}]
-    [TOOL: fix_error        | {"error":"...","context":"..."}]
-
-  — GITHUB —
-    [TOOL: push_github      | {"repo":"owner/repo","path":"file.tsx","content":"...","message":"..."}]
-    [TOOL: read_github_file | {"repo":"owner/repo","path":"file.tsx"}]
-    [TOOL: list_github_files| {"repo":"owner/repo","dir":"/"}]
-    [TOOL: create_github_issue | {"repo":"owner/repo","title":"...","body":"..."}]
-
-  — AI & MEDIA —
-    [TOOL: generate_image   | {"prompt":"..."}]
-    [TOOL: analyze_image    | {"url":"https://..."}]
-    [TOOL: summarize_text   | {"text":"...","lang":"ar"}]
-    [TOOL: translate_text   | {"text":"...","to":"en"}]
-
-  — PLANNING & REASONING —
-    [TOOL: create_plan      | {"goal":"...","steps":5}]
-    [TOOL: deep_think       | {"question":"..."}]
-
-  — MEMORY —
-    [TOOL: read_memory      | {"key":"..."}]
-    [TOOL: save_memory      | {"key":"...","value":"..."}]
-    [TOOL: list_memory      | {}]
-
-  — UTILITIES —
-    [TOOL: calculate        | {"expr":"2+2"}]
-    [TOOL: get_datetime     | {}]
-    [TOOL: format_json      | {"data":"..."}]
-
-  RULES:
-  1. Start with THOUGHT: analyse the goal carefully.
-  2. Use exactly one tool per step.
-  3. After OBSERVATION, decide next step.
-  4. Write FINAL ANSWER: when done.
-  5. If something fails, call fix_error then retry.
-  6. You have up to 15 iterations — plan efficiently.
-  7. For complex tasks: start with create_plan, then execute each step.`;
-
-    const agentTools = {
-      // — WEB & DATA —
-      search_web: async ({ query }) => {
-        try {
-          const r = await fetch('https://s.jina.ai/' + encodeURIComponent(query), { headers: { Accept: 'application/json' } });
-          const d = await r.json();
-          return JSON.stringify(d).slice(0, 3000);
-        } catch (e) { return 'Search failed: ' + e.message; }
-      },
-      fetch_url: async ({ url }) => {
-        try {
-          const r = await fetch('https://r.jina.ai/' + url, { headers: { Accept: 'text/plain' } });
-          return (await r.text()).slice(0, 3000);
-        } catch (e) { return 'Fetch failed: ' + e.message; }
-      },
-      get_weather: async ({ city }) => {
-        try {
-          const r = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`);
-          const d = await r.json();
-          const c = d.current_condition[0];
-          return `${city}: ${c.weatherDesc[0].value}, ${c.temp_C}°C, humidity ${c.humidity}%, wind ${c.windspeedKmph}km/h`;
-        } catch (e) { return 'Weather failed: ' + e.message; }
-      },
-      search_github: async ({ query, type = 'repositories' }) => {
-        try {
-          const tk = keys.GITHUB_TOKEN;
-          const r = await fetch(`https://api.github.com/search/${type}?q=${encodeURIComponent(query)}&per_page=5`, {
-            headers: { ...(tk ? { Authorization: 'token ' + tk } : {}), Accept: 'application/vnd.github+json' }
-          });
-          const d = await r.json();
-          return JSON.stringify((d.items || []).map(i => ({ name: i.full_name || i.name, stars: i.stargazers_count, url: i.html_url, description: i.description }))).slice(0, 2000);
-        } catch (e) { return 'GitHub search failed: ' + e.message; }
-      },
-
-      // — CODE & BUILD —
-      build_app: async ({ description }) => {
-        try {
-          const res = await callGroq('Write complete React Native Expo code for: ' + description + '. Return only code, no markdown.', 'meta-llama/llama-4-maverick-17b-128e-instruct');
-          return res.choices[0].message.content.slice(0, 4000);
-        } catch (e) { return 'Build failed: ' + e.message; }
-      },
-      analyze_code: async ({ code, goal = 'review' }) => {
-        try {
-          const res = await callGroq(`${goal === 'debug' ? 'Find bugs in' : goal === 'improve' ? 'Improve and optimize' : 'Review'} this code:\n\n${code.slice(0, 3000)}`, 'deepseek-r1-distill-llama-70b');
-          return res.choices[0].message.content.slice(0, 3000);
-        } catch (e) { return 'Analysis failed: ' + e.message; }
-      },
-      execute_code: async ({ code }) => {
-        try {
-          const fn = new Function(code);
-          const result = fn();
-          return String(result ?? 'Done (no return value)');
-        } catch (e) { return 'Execution error: ' + e.message; }
-      },
-      fix_error: async ({ error, context }) => {
-        try {
-          const res = await callGroq(`Diagnose and fix this error: ${error}\nContext: ${context}`, 'deepseek-r1-distill-llama-70b');
-          return res.choices[0].message.content.slice(0, 2000);
-        } catch (e) { return 'Diagnosis failed'; }
-      },
-
-      // — GITHUB —
-      push_github: async ({ repo, path, content, message }) => {
-        try {
-          const tk = keys.GITHUB_TOKEN;
-          if (!tk) return 'Error: No GitHub token in Vault.';
-          const shaRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, { headers: { Authorization: 'token ' + tk } });
-          const shaJson = await shaRes.json();
-          const r = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
-            method: 'PUT',
-            headers: { Authorization: 'token ' + tk, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, content: btoa(unescape(encodeURIComponent(content))), ...(shaJson.sha ? { sha: shaJson.sha } : {}) })
-          });
-          const j = await r.json();
-          return j.commit ? '✅ Pushed: ' + j.commit.sha.slice(0, 8) + ' — ' + j.commit.html_url : 'Push failed: ' + JSON.stringify(j).slice(0, 200);
-        } catch (e) { return 'Push error: ' + e.message; }
-      },
-      read_github_file: async ({ repo, path }) => {
-        try {
-          const tk = keys.GITHUB_TOKEN;
-          const r = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, { headers: { ...(tk ? { Authorization: 'token ' + tk } : {}), Accept: 'application/vnd.github+json' } });
-          const d = await r.json();
-          if (!d.content) return 'File not found or is a directory';
-          return atob(d.content.replace(/\n/g, '')).slice(0, 4000);
-        } catch (e) { return 'Read failed: ' + e.message; }
-      },
-      list_github_files: async ({ repo, dir = '' }) => {
-        try {
-          const tk = keys.GITHUB_TOKEN;
-          const r = await fetch(`https://api.github.com/repos/${repo}/contents/${dir}`, { headers: { ...(tk ? { Authorization: 'token ' + tk } : {}), Accept: 'application/vnd.github+json' } });
-          const d = await r.json();
-          if (!Array.isArray(d)) return 'Not a directory or not found';
-          return d.map(f => `${f.type === 'dir' ? '📁' : '📄'} ${f.name}`).join('\n');
-        } catch (e) { return 'List failed: ' + e.message; }
-      },
-      create_github_issue: async ({ repo, title, body }) => {
-        try {
-          const tk = keys.GITHUB_TOKEN;
-          if (!tk) return 'Error: No GitHub token.';
-          const r = await fetch(`https://api.github.com/repos/${repo}/issues`, {
-            method: 'POST',
-            headers: { Authorization: 'token ' + tk, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, body })
-          });
-          const j = await r.json();
-          return j.html_url ? '✅ Issue created: ' + j.html_url : 'Failed: ' + JSON.stringify(j).slice(0, 200);
-        } catch (e) { return 'Issue error: ' + e.message; }
-      },
-
-      // — AI & MEDIA —
-      generate_image: async ({ prompt }) => 'IMAGE_URL::https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=768&height=768&nologo=true&seed=' + Date.now(),
-      analyze_image: async ({ url }) => {
-        try {
-          const res = await callGroq(JSON.stringify([{ role: 'user', content: [{ type: 'text', text: 'Analyze this image in detail.' }, { type: 'image_url', image_url: { url } }] }]), 'llama-3.2-90b-vision-preview');
-          return res.choices[0].message.content.slice(0, 2000);
-        } catch (e) { return 'Vision failed: ' + e.message; }
-      },
-      summarize_text: async ({ text, lang = 'en' }) => {
-        try {
-          const res = await callGroq(`Summarize concisely in ${lang === 'ar' ? 'Arabic' : 'English'}:\n\n${text.slice(0, 4000)}`, 'meta-llama/llama-4-maverick-17b-128e-instruct');
-          return res.choices[0].message.content.slice(0, 1500);
-        } catch (e) { return 'Summary failed: ' + e.message; }
-      },
-      translate_text: async ({ text, to = 'en' }) => {
-        try {
-          const res = await callGroq(`Translate to ${to}. Return only the translation:\n\n${text.slice(0, 3000)}`, 'meta-llama/llama-4-maverick-17b-128e-instruct');
-          return res.choices[0].message.content.slice(0, 2000);
-        } catch (e) { return 'Translation failed: ' + e.message; }
-      },
-
-      // — PLANNING & REASONING —
-      create_plan: async ({ goal, steps = 5 }) => {
-        try {
-          const res = await callGroq(`Create a detailed ${steps}-step action plan to achieve: ${goal}\nReturn as numbered list with clear actions.`, 'deepseek-r1-distill-llama-70b');
-          return res.choices[0].message.content.slice(0, 2000);
-        } catch (e) { return 'Plan failed: ' + e.message; }
-      },
-      deep_think: async ({ question }) => {
-        try {
-          const res = await callGroq(`Think deeply and reason step by step about: ${question}`, 'deepseek-r1-distill-llama-70b');
-          return res.choices[0].message.content.slice(0, 3000);
-        } catch (e) { return 'Thinking failed: ' + e.message; }
-      },
-
-      // — MEMORY —
-      read_memory: ({ key }) => agentMemory[key] || 'Not found',
-      save_memory: ({ key, value }) => { setAgentMemory(p => ({ ...p, [key]: value })); return '✅ Saved: ' + key; },
-      list_memory: () => {
-        const keys_list = Object.keys(agentMemory);
-        return keys_list.length ? keys_list.map(k => `${k}: ${String(agentMemory[k]).slice(0, 50)}`).join('\n') : 'Memory is empty';
-      },
-
-      // — UTILITIES —
-      calculate: ({ expr }) => { try { return String(eval(expr)); } catch (e) { return 'Calc error: ' + e.message; } },
-      get_datetime: () => {
-        const now = new Date();
-        return `Date: ${now.toLocaleDateString('ar-EG')} | Time: ${now.toLocaleTimeString('ar-EG')} | UTC: ${now.toISOString()}`;
-      },
-      format_json: ({ data }) => {
-        try {
-          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-          return JSON.stringify(parsed, null, 2).slice(0, 2000);
-        } catch (e) { return 'Invalid JSON: ' + e.message; }
-      },
-    };
-
-    const runAgent = async () => {
-      if (!agentGoal.trim() || agentRunning) return;
-      setAgentRunning(true);
-      setAgentSteps([{ id: 1, type: 'goal', text: '🎯 Goal: ' + agentGoal, ts: new Date().toLocaleTimeString() }]);
-      
-      let history = [];
-      let iteration = 0;
-      const MAX_ITER = 10;
-
+    // 15. تلخيص نص
+    summarize_text: async ({ text, lang = 'ar' }) => {
       try {
-        while (iteration < MAX_ITER) {
-          iteration++;
-          const prompt = iteration === 1 ? 'GOAL: ' + agentGoal : 'Next step? History so far:\n' + history.slice(-3).map(h => h.role + ': ' + h.content.slice(0, 200)).join('\n');
-          
-          const llmRes = await callGroq(prompt, selectedModel, history, AGENT_SYSTEM);
-          const rawText = llmRes.choices[0].message.content;
-          history.push({ role: 'assistant', content: rawText });
+        return await callGroq([
+          { role: 'system', content: `لخّص النص التالي بشكل موجز ومفيد باللغة ${lang === 'ar' ? 'العربية' : 'الإنجليزية'}.` },
+          { role: 'user', content: text.slice(0, 6000) }
+        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
+      } catch (e) { return 'فشل التلخيص: ' + e.message; }
+    },
 
-          const thinkMatch = rawText.match(/<think>([\s\S]*?)<\/think>/i);
-          if (thinkMatch) {
-            setAgentSteps(p => [...p, { id: Date.now() + 1, type: 'thought', text: '💭 ' + thinkMatch[1].trim(), ts: new Date().toLocaleTimeString() }]);
-          }
+    // 16. ترجمة
+    translate_text: async ({ text, to = 'en' }) => {
+      try {
+        const langs = { en: 'الإنجليزية', ar: 'العربية', fr: 'الفرنسية', de: 'الألمانية', es: 'الإسبانية', zh: 'الصينية' };
+        return await callGroq([
+          { role: 'user', content: `ترجم إلى ${langs[to] || to}:\n\n${text.slice(0, 3000)}` }
+        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
+      } catch (e) { return 'فشل الترجمة: ' + e.message; }
+    },
 
-          if (/FINAL ANSWER:/i.test(rawText)) {
-            const answer = rawText.split(/FINAL ANSWER:/i)[1]?.trim() || rawText;
-            setAgentSteps(p => [...p, { id: Date.now() + 2, type: 'done', text: '✅ Final: ' + answer, ts: new Date().toLocaleTimeString() }]);
-            setAgentHistory(p => [{ goal: agentGoal, answer, ts: new Date().toISOString() }, ...p]);
-            break;
-          }
+    // 17. إنشاء خطة
+    create_plan: async ({ goal, steps = 5 }) => {
+      try {
+        return await callGroq([
+          { role: 'system', content: 'أنت مخطط استراتيجي خبير. اصنع خططاً مفصلة وقابلة للتنفيذ.' },
+          { role: 'user', content: `ضع خطة مفصلة من ${steps} خطوات لتحقيق: ${goal}` }
+        ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
+      } catch (e) { return 'فشل إنشاء الخطة: ' + e.message; }
+    },
 
-          const toolMatch = rawText.match(/\[TOOL:\s*(\w+)\s*\|\s*(\{[^\]]*\})\]/s);
-          if (toolMatch) {
-            const name = toolMatch[1].trim();
-            const args = JSON.parse(toolMatch[2]);
-            setAgentSteps(p => [...p, { id: Date.now() + 3, type: 'tool_call', text: '🔧 Tool: ' + name, ts: new Date().toLocaleTimeString() }]);
-            
-            let obs = '';
-            try {
-              const res = await agentTools[name](args);
-              obs = typeof res === 'string' ? res : JSON.stringify(res);
-            } catch (e) { obs = 'Error: ' + e.message; }
-            
-            const isImg = obs.startsWith('IMAGE_URL::');
-            setAgentSteps(p => [...p, {
-              id: Date.now() + 4,
-              type: isImg ? 'image' : 'observation',
-              text: isImg ? obs.replace('IMAGE_URL::', '') : '👁️ Result: ' + obs.slice(0, 500),
-              ts: new Date().toLocaleTimeString(),
-              imageUrl: isImg ? obs.replace('IMAGE_URL::', '') : null
-            }]);
-            history.push({ role: 'user', content: 'OBSERVATION: ' + obs.slice(0, 2000) });
-          } else if (iteration >= MAX_ITER) {
-             setAgentSteps(p => [...p, { id: Date.now() + 5, type: 'done', text: '⚠️ Limit reached. Last: ' + rawText.slice(0, 300), ts: new Date().toLocaleTimeString() }]);
-          }
-        }
-      } catch (e) {
-        setAgentSteps(p => [...p, { id: Date.now() + 6, type: 'error', text: '❌ Agent Error: ' + e.message, ts: new Date().toLocaleTimeString() }]);
-      } finally {
-        setAgentRunning(false);
-      }
-    };
+    // 18. تفكير عميق
+    deep_think: async ({ question }) => {
+      try {
+        return await callGroq([
+          { role: 'system', content: 'أنت مفكر فلسفي وعلمي عميق. فكّر بعمق وتأمل.' },
+          { role: 'user', content: 'فكّر بعمق في: ' + question }
+        ], 'deepseek-r1-distill-llama-70b', 8000);
+      } catch (e) { return 'فشل التفكير العميق: ' + e.message; }
+    },
 
-    // --- RENDER HELPERS ---
+    // 19. قراءة الذاكرة
+    read_memory: async ({ key }) => {
+      return agentMemory[key] !== undefined ? `🧠 ${key}: ${String(agentMemory[key])}` : `❌ لا يوجد: ${key}`;
+    },
 
-    const renderTabIcon = (name, icon, lib = 'Ionicons') => {
-      const active = activeTab === name;
-      const IconComp = lib === 'Ionicons' ? Ionicons : FontAwesome5;
-      return (
-        <TouchableOpacity onPress={() => setActiveTab(name)} style={styles.tabItem}>
-          <IconComp name={icon} size={24} color={active ? THEME.primary : THEME.textSecondary} />
-          <Text style={[styles.tabLabel, { color: active ? THEME.primary : THEME.textSecondary }]}>{name}</Text>
-          {active && <View style={styles.activeDot} />}
-        </TouchableOpacity>
-      );
-    };
+    // 20. حفظ في الذاكرة
+    save_memory: async ({ key, value }) => {
+      setAgentMemory(p => ({ ...p, [key]: value }));
+      return `✅ تم حفظ "${key}" في الذاكرة`;
+    },
 
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <StarField />
-        <NebulaOrbs />
+    // 21. قائمة الذاكرة
+    list_memory: async () => {
+      const entries = Object.entries(agentMemory);
+      if (!entries.length) return '🧠 الذاكرة فارغة';
+      return '🧠 الذاكرة:\n' + entries.map(([k, v]) => `• ${k}: ${String(v).slice(0, 100)}`).join('\n');
+    },
 
-        <View style={styles.header}>
-          <View style={styles.titleRow}>
-            <Text style={styles.nebulaText}>NEBULA</Text>
-            <Text style={styles.studioText}>STUDIO PRO</Text>
-          </View>
-          <TouchableOpacity onPress={() => setShowVault(true)}>
-            <Ionicons name="key-outline" size={24} color={keys.GITHUB_TOKEN ? THEME.success : THEME.textSecondary} />
-          </TouchableOpacity>
-        </View>
+    // 22. حساب
+    calculate: async ({ expr }) => {
+      try {
+        const result = Function('"use strict"; return (' + expr + ')')();
+        return `🔢 ${expr} = ${result}`;
+      } catch (e) { return 'خطأ: ' + e.message; }
+    },
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-          <View style={styles.tabContent}>
-            {activeTab === 'Chat' && (
-              <View style={{ flex: 1 }}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modelBar}>
-                  {MODELS.map(m => (
-                    <TouchableOpacity
-                      key={m.id}
-                      onPress={() => setSelectedModel(m.id)}
-                      style={[styles.modelChip, selectedModel === m.id && styles.modelChipActive]}
-                    >
-                      <FontAwesome5 name={m.icon} size={12} color={selectedModel === m.id ? '#fff' : THEME.textSecondary} />
-                      <Text style={[styles.modelChipText, { color: selectedModel === m.id ? '#fff' : THEME.textSecondary }]}>{m.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                <FlatList
-                  ref={scrollRef}
-                  data={messages}
-                  keyExtractor={m => m.id}
-                  contentContainerStyle={{ padding: 16 }}
-                  onContentSizeChange={() => scrollRef.current?.scrollToEnd()}
-                  renderItem={({ item }) => (
-                    <View style={[styles.msgWrapper, item.role === 'user' ? styles.msgUser : styles.msgAI]}>
-                      <GlassCard style={styles.msgCard}>
-                        <Text style={styles.msgText}>{item.content}</Text>
-                      </GlassCard>
-                    </View>
-                  )}
-                />
-                {loading && <ShimmerLoading />}
-                <View style={styles.inputArea}>
-                  <GlassCard style={styles.inputGlass}>
-                    <TextInput
-                      value={input}
-                      onChangeText={setInput}
-                      placeholder="Enter message..."
-                      placeholderTextColor={THEME.textSecondary}
-                      style={styles.textInput}
-                      multiline
-                    />
-                    <TouchableOpacity onPress={handleSend} style={styles.sendBtn}>
-                      <LinearGradient colors={[THEME.primary, THEME.primaryGlow]} style={styles.sendGradient}>
-                        <Ionicons name="send" size={20} color="#fff" />
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </GlassCard>
-                </View>
-              </View>
-            )}
+    // 23. التاريخ والوقت
+    get_datetime: async () => {
+      const now = new Date();
+      return `📅 ${now.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n⏰ ${now.toLocaleTimeString('ar-EG')}`;
+    },
 
-            {activeTab === 'Vision' && (
-              <ScrollView contentContainerStyle={{ padding: 20 }}>
-                <Text style={styles.tabTitle}>Vision 90B</Text>
-                <TouchableOpacity onPress={pickVisionImage} style={styles.dropZone}>
-                  {visionImage ? (
-                    <Image source={{ uri: visionImage.uri }} style={styles.previewImg} />
-                  ) : (
-                    <View style={styles.dropContent}>
-                      <Ionicons name="image-outline" size={48} color={THEME.textSecondary} />
-                      <Text style={styles.dropText}>Select Image to Analyze</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-                <PremiumButton title="Analyze Image" onPress={analyzeVision} icon="eye" loading={loading} />
-                {visionResult && (
-                  <GlassCard style={styles.resultCard}>
-                    <Text style={styles.resultTitle}>Analysis</Text>
-                    <Text style={styles.resultText}>{visionResult}</Text>
-                  </GlassCard>
-                )}
-              </ScrollView>
-            )}
+    // 24. تنسيق JSON
+    format_json: async ({ data }) => {
+      try {
+        const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+        return JSON.stringify(parsed, null, 2);
+      } catch (e) { return 'خطأ في التنسيق: ' + e.message; }
+    },
+  }), [keys, agentMemory, model]);
 
-            {activeTab === 'Search' && (
-              <View style={{ flex: 1, padding: 16 }}>
-                <GlassCard style={styles.searchBar}>
-                  <Ionicons name="search" size={20} color={THEME.textSecondary} />
-                  <TextInput
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    placeholder="Deep search the web..."
-                    placeholderTextColor={THEME.textSecondary}
-                    style={styles.searchInput}
-                    onSubmitEditing={handleSearch}
-                  />
-                </GlassCard>
-                <FlatList
-                  data={searchResults}
-                  keyExtractor={(item, idx) => idx.toString()}
-                  renderItem={({ item }) => (
-                    <GlassCard style={styles.searchResultCard}>
-                      <Text style={styles.searchResultTitle}>{item.title}</Text>
-                      <Text style={styles.searchResultDesc} numberOfLines={3}>{item.description || item.content}</Text>
-                      <TouchableOpacity onPress={() => Linking.openURL(item.url)}>
-                        <Text style={styles.searchResultUrl}>{item.url}</Text>
-                      </TouchableOpacity>
-                    </GlassCard>
-                  )}
-                />
-              </View>
-            )}
+  // ─── AGENT SYSTEM PROMPT ──────────────────────
+  const AGENT_SYS = `أنت وكيل ذكاء اصطناعي احترافي مستقل — NEBULA AI AGENT.
+لديك 24 أداة قوية تمكّنك من:
+• تصفح الإنترنت بنفسك وجلب أي محتوى
+• التفكير البصري وتحليل الصور
+• كتابة وتنفيذ الكود
+• التفاعل مع GitHub
+• التخطيط والتفكير العميق
+• الذاكرة الدائمة
 
-            {activeTab === 'Create' && (
-              <ScrollView contentContainerStyle={{ padding: 16 }}>
-                <Text style={styles.tabTitle}>Studio Engine</Text>
-                <GlassCard style={styles.createInputCard}>
-                  <TextInput
-                    value={createPrompt}
-                    onChangeText={setCreatePrompt}
-                    placeholder="Describe your masterpiece..."
-                    placeholderTextColor={THEME.textSecondary}
-                    style={styles.createInput}
-                    multiline
-                  />
-                </GlassCard>
-                <View style={styles.btnRow}>
-                  <PremiumButton title="Image" onPress={handleGenerateImage} icon="image" style={{ flex: 1, marginRight: 8 }} />
-                  <PremiumButton title="Storyboard" onPress={handleStoryboard} icon="film" style={{ flex: 1 }} loading={loading} />
-                </View>
-                {creationImage && (
-                  <View style={styles.creationWrapper}>
-                    <Image source={{ uri: creationImage }} style={styles.creationImg} />
-                    <PremiumButton title="Download" onPress={() => Share.share({ url: creationImage })} icon="download" style={styles.absBtn} />
-                  </View>
-                )}
-                {storyboard && (
-                  <View style={styles.storyboardGrid}>
-                    {storyboard.map((s, i) => (
-                      <GlassCard key={i} style={styles.storyCard}>
-                        <Image source={{ uri: s.url }} style={styles.storyImg} />
-                        <Text style={styles.storyText}>Scene {s.scene}</Text>
-                      </GlassCard>
-                    ))}
-                  </View>
-                )}
-              </ScrollView>
-            )}
+الأدوات المتاحة (استخدمها بالصيغة الدقيقة):
 
-            {activeTab === 'Build' && (
-              <ScrollView contentContainerStyle={{ padding: 16 }}>
-                <Text style={styles.tabTitle}>Nebula Forge</Text>
-                <GlassCard style={styles.buildCard}>
-                  <TextInput
-                    value={buildPrompt}
-                    onChangeText={setBuildPrompt}
-                    placeholder="What app should I build for you?"
-                    placeholderTextColor={THEME.textSecondary}
-                    style={styles.buildInput}
-                    multiline
-                  />
-                </GlassCard>
-                <PremiumButton title="Generate & Push to GitHub" onPress={handleBuild} icon="code-slash" loading={loading} />
-                {lastCommitUrl && (
-                  <TouchableOpacity onPress={() => Linking.openURL(lastCommitUrl)} style={styles.commitLink}>
-                    <Ionicons name="logo-github" size={16} color={THEME.success} />
-                    <Text style={styles.commitText}>View Commit on GitHub</Text>
-                  </TouchableOpacity>
-                )}
-                {buildCode && (
-                  <GlassCard style={styles.codePreview}>
-                    <Text style={styles.codeText}>{buildCode.slice(0, 1000)}...</Text>
-                  </GlassCard>
-                )}
-              </ScrollView>
-            )}
+【ويب وبيانات】
+[TOOL: search_web | {"query":"..."}] — ابحث في الإنترنت
+[TOOL: fetch_url | {"url":"https://..."}] — اجلب أي صفحة ويب
+[TOOL: get_weather | {"city":"القاهرة"}] — الطقس
+[TOOL: search_github | {"query":"...","type":"repositories"}] — بحث GitHub
 
-            {activeTab === 'Vault' && (
-              <ScrollView contentContainerStyle={{ padding: 20 }}>
-                <Text style={styles.tabTitle}>Neural Vault</Text>
-                <GlassCard style={styles.vaultCard}>
-                  <VaultItem label="GitHub Token" value={keys.GITHUB_TOKEN} onSave={v => saveKey('GITHUB_TOKEN', v)} />
-                  <VaultItem label="Jina AI Key" value={keys.JINA_KEY} onSave={v => saveKey('JINA_KEY', v)} />
-                  <VaultItem label="Groq Override" value={keys.GROQ_OVERRIDE} onSave={v => saveKey('GROQ_OVERRIDE', v)} />
-                </GlassCard>
-                <PremiumButton title="Close Vault" onPress={() => setShowVault(false)} />
-              </ScrollView>
-            )}
+【كود وبناء】
+[TOOL: build_app | {"description":"..."}] — بناء تطبيق
+[TOOL: analyze_code | {"code":"...","goal":"review"}] — تحليل كود
+[TOOL: execute_code | {"code":"..."}] — تنفيذ JavaScript
+[TOOL: fix_error | {"error":"...","context":"..."}] — إصلاح خطأ
 
-            {activeTab === 'Agent' && (
-              <View style={{ flex: 1 }}>
-                <View style={{ padding: 16 }}>
-                  <GlassCard style={styles.agentInputCard}>
-                    <TextInput
-                      value={agentGoal}
-                      onChangeText={setAgentGoal}
-                      placeholder="Set autonomous goal..."
-                      placeholderTextColor={THEME.textSecondary}
-                      style={styles.agentInput}
-                    />
-                    <TouchableOpacity onPress={runAgent} disabled={agentRunning} style={styles.runAgentBtn}>
-                      {agentRunning ? <ActivityIndicator color="#fff" /> : <Ionicons name="play" size={24} color="#fff" />}
-                    </TouchableOpacity>
-                  </GlassCard>
-                </View>
-                <FlatList
-                  data={agentSteps}
-                  keyExtractor={s => s.id.toString()}
-                  contentContainerStyle={{ padding: 16 }}
-                  renderItem={({ item }) => (
-                    <GlassCard style={[styles.agentStep, styles['agentStep_' + item.type]]}>
-                      <View style={styles.stepHeader}>
-                        <Text style={styles.stepType}>{item.type.toUpperCase()}</Text>
-                        <Text style={styles.stepTs}>{item.ts}</Text>
-                      </View>
-                      {item.type === 'image' ? (
-                         <Image source={{ uri: item.imageUrl }} style={styles.stepImage} />
-                      ) : (
-                         <Text style={styles.stepText}>{item.text}</Text>
-                      )}
-                    </GlassCard>
-                  )}
-                />
-              </View>
-            )}
-          </View>
-        </KeyboardAvoidingView>
+【GitHub】
+[TOOL: push_github | {"repo":"owner/repo","path":"file","content":"...","message":"..."}]
+[TOOL: read_github_file | {"repo":"owner/repo","path":"file"}]
+[TOOL: list_github_files | {"repo":"owner/repo","dir":""}]
+[TOOL: create_github_issue | {"repo":"owner/repo","title":"...","body":"..."}]
 
-        <BlurView intensity={20} tint="dark" style={styles.bottomBar}>
-          <View style={styles.tabsInner}>
-            {renderTabIcon('Chat', 'chatbubble-ellipses-outline')}
-            {renderTabIcon('Vision', 'eye-outline')}
-            {renderTabIcon('Search', 'search-outline')}
-            {renderTabIcon('Create', 'color-palette-outline')}
-            {renderTabIcon('Build', 'code-outline')}
-            {renderTabIcon('Vault', 'lock-closed-outline')}
-            {renderTabIcon('Agent', 'hardware-chip-outline')}
-          </View>
-        </BlurView>
+【ذكاء اصطناعي ووسائط】
+[TOOL: generate_image | {"prompt":"..."}] — توليد صورة
+[TOOL: analyze_image | {"url":"https://...","question":"..."}] — تحليل صورة (تفكير بصري)
+[TOOL: summarize_text | {"text":"...","lang":"ar"}] — تلخيص
+[TOOL: translate_text | {"text":"...","to":"en"}] — ترجمة
 
-        <Modal visible={showVault && activeTab !== 'Vault'} animationType="slide" transparent>
-           <BlurView intensity={80} style={StyleSheet.absoluteFill}>
-              <SafeAreaView style={{ flex: 1, justifyContent: 'center' }}>
-                 <TouchableOpacity style={styles.modalClose} onPress={() => setShowVault(false)}>
-                    <Ionicons name="close" size={32} color="#fff" />
-                 </TouchableOpacity>
-                 <VaultScreen keys={keys} saveKey={saveKey} />
-              </SafeAreaView>
-           </BlurView>
-        </Modal>
-      </SafeAreaView>
-    );
-  }
+【تخطيط وتفكير】
+[TOOL: create_plan | {"goal":"...","steps":5}] — خطة مفصلة
+[TOOL: deep_think | {"question":"..."}] — تفكير عميق
 
-  const VaultItem = ({ label, value, onSave }) => {
-    const [val, setVal] = useState(value || '');
-    return (
-      <View style={styles.vaultItem}>
-        <Text style={styles.vaultLabel}>{label}</Text>
-        <View style={styles.vaultRow}>
-          <TextInput
-            value={val}
-            onChangeText={setVal}
-            secureTextEntry
-            placeholder="••••••••"
-            placeholderTextColor={THEME.textSecondary}
-            style={styles.vaultInput}
-          />
-          <TouchableOpacity onPress={() => onSave(val)} style={styles.vaultSave}>
-            <Ionicons name="checkmark" size={20} color={THEME.success} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
+【ذاكرة】
+[TOOL: read_memory | {"key":"..."}]
+[TOOL: save_memory | {"key":"...","value":"..."}]
+[TOOL: list_memory | {}]
+
+【أدوات】
+[TOOL: calculate | {"expr":"2+2"}]
+[TOOL: get_datetime | {}]
+[TOOL: format_json | {"data":"..."}]
+
+قواعد الوكيل:
+1. ابدأ بـ THOUGHT: حلّل الهدف
+2. استخدم أداة واحدة في كل خطوة بصيغة [TOOL: اسم_الأداة | {...}]
+3. بعد OBSERVATION: قرر الخطوة التالية
+4. اكتب FINAL ANSWER: عند الانتهاء
+5. للمهام المعقدة: ابدأ بـ create_plan
+6. عند الفشل: استخدم fix_error وأعد المحاولة
+7. حتى 15 تكراراً — خطط بكفاءة`;
+
+  // ─── RUN AGENT ───────────────────────────────
+  const addStep = (type, content, extra = {}) => {
+    const step = { id: Date.now().toString() + Math.random(), type, content, ts: new Date().toLocaleTimeString('ar'), ...extra };
+    setAgentSteps(p => [...p, step]);
+    return step;
   };
 
-  const VaultScreen = ({ keys, saveKey }) => (
-    <View style={{ padding: 20 }}>
-      <Text style={styles.tabTitle}>Neural Vault</Text>
-      <GlassCard style={styles.vaultCard}>
-        <VaultItem label="GitHub Token" value={keys.GITHUB_TOKEN} onSave={v => saveKey('GITHUB_TOKEN', v)} />
-        <VaultItem label="Jina AI Key" value={keys.JINA_KEY} onSave={v => saveKey('JINA_KEY', v)} />
-        <VaultItem label="Groq Override" value={keys.GROQ_OVERRIDE} onSave={v => saveKey('GROQ_OVERRIDE', v)} />
-      </GlassCard>
+  const runAgent = useCallback(async () => {
+    if (!agentGoal.trim() || agentRunning) return;
+    setAgentRunning(true);
+    setAgentSteps([]);
+    const goal = agentGoal.trim();
+
+    addStep('goal', goal);
+
+    const history = [{ role: 'system', content: AGENT_SYS }];
+    history.push({ role: 'user', content: `الهدف: ${goal}` });
+
+    for (let iter = 0; iter < 15; iter++) {
+      addStep('thinking', `التكرار ${iter + 1}/15 — أفكر...`);
+      let reply;
+      try {
+        reply = await callGroq(history, 'meta-llama/llama-4-maverick-17b-128e-instruct', 3000);
+      } catch (e) {
+        addStep('error', 'خطأ في الاتصال: ' + e.message);
+        break;
+      }
+      history.push({ role: 'assistant', content: reply });
+
+      // Extract THOUGHT
+      const thoughtMatch = reply.match(/THOUGHT:\s*([\s\S]*?)(?:\[TOOL:|FINAL ANSWER:|$)/);
+      if (thoughtMatch?.[1]?.trim()) addStep('thought', thoughtMatch[1].trim());
+
+      // Check FINAL ANSWER
+      if (reply.includes('FINAL ANSWER:')) {
+        const ans = reply.split('FINAL ANSWER:')[1]?.trim() || reply;
+        addStep('done', ans);
+        break;
+      }
+
+      // Extract TOOL call
+      const toolMatch = reply.match(/\[TOOL:\s*(\w+)\s*\|\s*(\{[\s\S]*?\})\]/);
+      if (!toolMatch) {
+        // No tool call, treat as final
+        addStep('done', reply.replace(/THOUGHT:[\s\S]*?(?=\n|$)/g, '').trim() || reply);
+        break;
+      }
+
+      const [, toolName, argsStr] = toolMatch;
+      let args = {};
+      try { args = JSON.parse(argsStr); } catch { args = { raw: argsStr }; }
+
+      addStep('tool_call', `🔧 ${toolName}`, { tool: toolName, args });
+
+      const toolFn = tools[toolName];
+      let observation;
+      if (toolFn) {
+        try { observation = await toolFn(args); }
+        catch (e) { observation = 'خطأ: ' + e.message; }
+      } else {
+        observation = `❌ أداة غير معروفة: ${toolName}`;
+      }
+
+      // Handle image results
+      const isImage = typeof observation === 'string' && observation.startsWith('IMAGE:');
+      const imageUrl = isImage ? observation.slice(6) : null;
+      const obsText = isImage ? `تم توليد الصورة: ${imageUrl}` : String(observation).slice(0, 2000);
+
+      addStep('observation', obsText, { imageUrl });
+      history.push({ role: 'user', content: `OBSERVATION: ${obsText}` });
+    }
+
+    setAgentRunning(false);
+  }, [agentGoal, agentRunning, tools, model]);
+
+  // ─── CHAT ─────────────────────────────────────
+  const sendChat = async () => {
+    if (!chatInput.trim() || chatLoading) return;
+    const txt = chatInput.trim();
+    const userMsg = { id: Date.now().toString(), role: 'user', content: txt };
+    setMsgs(p => [...p, userMsg]);
+    setChatInput('');
+    setChatLoading(true);
+    try {
+      const history = msgs.slice(-20).map(m => ({ role: m.role, content: m.content }));
+      history.push({ role: 'user', content: txt });
+      const reply = await callGroq(history);
+      setMsgs(p => [...p, { id: (Date.now() + 1).toString(), role: 'assistant', content: reply }]);
+    } catch (e) {
+      Alert.alert('خطأ', e.message);
+    } finally {
+      setChatLoading(false);
+      setTimeout(() => chatScroll.current?.scrollToEnd({ animated: true }), 200);
+    }
+  };
+
+  // ─── VISION ───────────────────────────────────
+  const pickImage = async () => {
+    const r = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, quality: 0.7, base64: true,
+    });
+    if (!r.canceled) setVisImg(r.assets[0]);
+  };
+
+  const analyzeVision = async () => {
+    if (!visImg || visLoading) return;
+    setVisLoading(true); setVisResult('');
+    try {
+      const dataUrl = `data:image/jpeg;base64,${visImg.base64}`;
+      groqIdx.current = (groqIdx.current + 1) % 7;
+      const base = groqIdx.current;
+      let reply, lastErr;
+      for (let t = 0; t < 7; t++) {
+        const key = getGroqKey(base + t);
+        if (!key) continue;
+        try {
+          const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'llama-3.2-90b-vision-preview',
+              messages: [{ role: 'user', content: [
+                { type: 'text', text: visPrompt || 'حلّل هذه الصورة بتفصيل كامل' },
+                { type: 'image_url', image_url: { url: dataUrl } },
+              ]}],
+              max_tokens: 2048,
+            }),
+          });
+          if (r.status === 429 || r.status === 401) { lastErr = new Error('rate limit'); continue; }
+          if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message); }
+          const d = await r.json();
+          reply = d.choices[0].message.content;
+          break;
+        } catch (e) { if (e.message?.includes('rate')) { lastErr = e; continue; } throw e; }
+      }
+      if (reply) setVisResult(reply);
+      else throw lastErr || new Error('فشل جميع المفاتيح');
+    } catch (e) {
+      Alert.alert('خطأ Vision', e.message);
+    } finally { setVisLoading(false); }
+  };
+
+  // ─── SEARCH ───────────────────────────────────
+  const doSearch = async () => {
+    if (!srchQ.trim() || srchLoading) return;
+    setSrchLoading(true); setSrchResults([]);
+    try {
+      const r = await fetch('https://s.jina.ai/' + encodeURIComponent(srchQ), {
+        headers: { Accept: 'application/json', 'X-Return-Format': 'markdown' }
+      });
+      const d = await r.json();
+      setSrchResults(d.data || []);
+    } catch (e) { Alert.alert('خطأ', e.message); }
+    finally { setSrchLoading(false); }
+  };
+
+  // ─── CREATE ───────────────────────────────────
+  const genImage = () => {
+    if (!createPrompt.trim()) return;
+    setCreateImg(`https://image.pollinations.ai/prompt/${encodeURIComponent(createPrompt)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`);
+  };
+
+  const genStoryboard = async () => {
+    if (!createPrompt.trim() || createLoading) return;
+    setCreateLoading(true);
+    try {
+      const res = await callGroq([
+        { role: 'user', content: `اصنع storyboard من 4 مشاهد لـ: ${createPrompt}\nأرجع JSON فقط: [{"scene":1,"title":"...","prompt":"..."},...]` }
+      ], 'meta-llama/llama-4-maverick-17b-128e-instruct');
+      const scenes = JSON.parse(res.match(/\[[\s\S]*\]/)[0]);
+      setStoryboard(scenes.map(s => ({
+        ...s,
+        url: `https://image.pollinations.ai/prompt/${encodeURIComponent(s.prompt)}?width=512&height=512&nologo=true&seed=${Math.random() * 9999 | 0}`
+      })));
+    } catch (e) { Alert.alert('خطأ', e.message); }
+    finally { setCreateLoading(false); }
+  };
+
+  // ─── BUILD ────────────────────────────────────
+  const doBuild = async () => {
+    if (!buildPrompt.trim() || buildLoading) return;
+    setBuildLoading(true); setBuildCode(''); setCommitUrl('');
+    try {
+      const code = await callGroq([
+        { role: 'system', content: 'أنت مطور React Native Expo خبير. اكتب كود كامل قابل للتشغيل.' },
+        { role: 'user', content: 'اكتب App.tsx كامل لـ: ' + buildPrompt + '\nأرجع الكود فقط.' }
+      ], 'meta-llama/llama-4-maverick-17b-128e-instruct', 8000);
+      setBuildCode(code);
+      if (keys.GITHUB) {
+        const repo = 'alhsryahmd266-jpg/ai-studio-apk';
+        const shaR = await fetch(`https://api.github.com/repos/${repo}/contents/generated_app.tsx`, {
+          headers: { Authorization: 'token ' + keys.GITHUB }
+        });
+        const shaJ = await shaR.json();
+        const pushR = await fetch(`https://api.github.com/repos/${repo}/contents/generated_app.tsx`, {
+          method: 'PUT',
+          headers: { Authorization: 'token ' + keys.GITHUB, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: '🤖 Built by Nebula Studio Pro', content: btoa(unescape(encodeURIComponent(code))), ...(shaJ.sha ? { sha: shaJ.sha } : {}) })
+        });
+        const pushJ = await pushR.json();
+        if (pushJ.commit) setCommitUrl(pushJ.commit.html_url);
+      }
+    } catch (e) { Alert.alert('خطأ', e.message); }
+    finally { setBuildLoading(false); }
+  };
+
+  // ─── RENDERS ──────────────────────────────────
+  const renderAgent = () => (
+    <View style={{ flex: 1 }}>
+      <View style={S.sectionPad}>
+        <Text style={S.sectionTitle}>🤖 وكيل ذكاء اصطناعي مستقل</Text>
+        <Text style={S.sectionSub}>24 أداة · تصفح الإنترنت · تفكير بصري · ذاكرة دائمة</Text>
+        <Glass style={S.inputGlass} glow={agentRunning ? C.purple : undefined}>
+          <TextInput
+            style={S.agentInput}
+            value={agentGoal}
+            onChangeText={setAgentGoal}
+            placeholder="ما الهدف؟ مثل: ابحث عن أحدث أخبار الذكاء الاصطناعي وقدّم ملخصاً"
+            placeholderTextColor={C.gray}
+            multiline
+            editable={!agentRunning}
+          />
+        </Glass>
+        <GBtn
+          onPress={runAgent}
+          disabled={agentRunning || !agentGoal.trim()}
+          colors={agentRunning ? [C.grayDark, C.grayDark] : [C.purple, C.purpleDark]}
+          icon={agentRunning ? undefined : 'play-outline'}
+          label={agentRunning ? 'يعمل...' : '▶ تشغيل الوكيل'}
+          style={{ marginTop: 12 }}
+        />
+        {agentRunning && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 }}>
+            <PulseDot color={C.purple} />
+            <Text style={{ color: C.gray, fontSize: 12 }}>الوكيل يعمل...</Text>
+          </View>
+        )}
+      </View>
+      <ScrollView ref={agentScroll} style={{ flex: 1 }} contentContainerStyle={S.sectionPad}
+        onContentSizeChange={() => agentScroll.current?.scrollToEnd({ animated: true })}>
+        {agentSteps.map(step => <AgentStepCard key={step.id} step={step} />)}
+      </ScrollView>
     </View>
   );
 
-  /**
-   * CORE STYLESHEET
-   * Optimized for Glassmorphism and Neon Effects
-   */
-  const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: THEME.background },
-    star: { position: 'absolute', backgroundColor: '#fff', borderRadius: 10 },
-    orb: { position: 'absolute', width: 300, height: 300, borderRadius: 150 },
-    header: {
-      height: 60,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      borderBottomWidth: 1,
-      borderBottomColor: THEME.cardBorder,
-    },
-    titleRow: { flexDirection: 'row', alignItems: 'center' },
-    nebulaText: { fontSize: 20, fontWeight: '900', color: THEME.primary, letterSpacing: 4 },
-    studioText: { fontSize: 20, fontWeight: '900', color: '#fff', letterSpacing: 4, marginLeft: 8 },
-    tabContent: { flex: 1 },
-    bottomBar: { height: 85, borderTopWidth: 1, borderTopColor: THEME.cardBorder },
-    tabsInner: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
-    tabItem: { alignItems: 'center', flex: 1 },
-    tabLabel: { fontSize: 10, marginTop: 4 },
-    activeDot: {
-      width: 4,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: THEME.primary,
-      marginTop: 4,
-      shadowColor: THEME.primary,
-      shadowRadius: 5,
-      shadowOpacity: 1,
-    },
-    glassCard: {
-      backgroundColor: THEME.card,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: THEME.cardBorder,
-      overflow: 'hidden',
-    },
-    btnContainer: { height: 50, borderRadius: 25, overflow: 'hidden', marginVertical: 10 },
-    btnGradient: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    btnContent: { flexDirection: 'row', alignItems: 'center' },
-    btnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-    shimmerBox: { height: 4, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden', marginHorizontal: 20 },
-    shimmerLine: { width: '100%', height: '100%' },
-    modelBar: { maxHeight: 50, paddingHorizontal: 16, marginVertical: 10 },
-    modelChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(255,255,255,0.05)',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 20,
-      marginRight: 8,
-      borderWidth: 1,
-      borderColor: 'transparent',
-    },
-    modelChipActive: { borderColor: THEME.primary, backgroundColor: 'rgba(124, 58, 237, 0.2)' },
-    modelChipText: { fontSize: 12, marginLeft: 6, fontWeight: '600' },
-    msgWrapper: { marginVertical: 8, maxWidth: '85%' },
-    msgUser: { alignSelf: 'flex-end' },
-    msgAI: { alignSelf: 'flex-start' },
-    msgCard: { padding: 12 },
-    msgText: { color: '#fff', lineHeight: 20 },
-    inputArea: { padding: 16 },
-    inputGlass: { flexDirection: 'row', alignItems: 'center', padding: 8 },
-    textInput: { flex: 1, color: '#fff', fontSize: 16, maxHeight: 100, paddingHorizontal: 12 },
-    sendBtn: { width: 40, height: 40, borderRadius: 20, overflow: 'hidden' },
-    sendGradient: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    tabTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
-    dropZone: {
-      height: 200,
-      borderRadius: 16,
-      borderWidth: 2,
-      borderColor: THEME.cardBorder,
-      borderStyle: 'dashed',
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: 'rgba(255,255,255,0.02)',
-      marginBottom: 20,
-    },
-    dropContent: { alignItems: 'center' },
-    dropText: { color: THEME.textSecondary, marginTop: 12 },
-    previewImg: { width: '100%', height: '100%', borderRadius: 14 },
-    resultCard: { padding: 16, marginTop: 20 },
-    resultTitle: { color: THEME.primary, fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
-    resultText: { color: '#fff', lineHeight: 22 },
-    searchBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 50, marginBottom: 16 },
-    searchInput: { flex: 1, color: '#fff', marginLeft: 10 },
-    searchResultCard: { padding: 16, marginBottom: 12 },
-    searchResultTitle: { color: THEME.secondary, fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
-    searchResultDesc: { color: THEME.textSecondary, fontSize: 14, lineHeight: 18 },
-    searchResultUrl: { color: THEME.primary, fontSize: 12, marginTop: 8 },
-    createInputCard: { padding: 16, marginBottom: 16 },
-    createInput: { color: '#fff', fontSize: 16, minHeight: 80 },
-    btnRow: { flexDirection: 'row', marginBottom: 16 },
-    creationWrapper: { borderRadius: 16, overflow: 'hidden', marginTop: 10 },
-    creationImg: { width: '100%', aspectRatio: 1, borderRadius: 16 },
-    absBtn: { position: 'absolute', bottom: 10, right: 10, width: 140 },
-    storyboardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 10 },
-    storyCard: { width: '48%', marginBottom: 16 },
-    storyImg: { width: '100%', aspectRatio: 1 },
-    storyText: { color: '#fff', padding: 8, fontSize: 12, textAlign: 'center' },
-    buildCard: { padding: 16, marginBottom: 16 },
-    buildInput: { color: '#fff', fontSize: 16, minHeight: 120 },
-    codePreview: { padding: 16, marginTop: 20, backgroundColor: '#000' },
-    codeText: { color: '#0f0', fontFamily: 'monospace', fontSize: 10 },
-    commitLink: { flexDirection: 'row', alignItems: 'center', marginTop: 12, alignSelf: 'center' },
-    commitText: { color: THEME.success, marginLeft: 8, fontSize: 14 },
-    vaultCard: { padding: 16 },
-    vaultItem: { marginBottom: 20 },
-    vaultLabel: { color: THEME.textSecondary, fontSize: 12, marginBottom: 8 },
-    vaultRow: { flexDirection: 'row', alignItems: 'center' },
-    vaultInput: { flex: 1, color: '#fff', borderBottomWidth: 1, borderBottomColor: THEME.cardBorder, paddingVertical: 4 },
-    vaultSave: { marginLeft: 12 },
-    modalClose: { alignSelf: 'flex-end', marginRight: 20, marginBottom: 10 },
-    agentInputCard: { flexDirection: 'row', alignItems: 'center', padding: 8 },
-    agentInput: { flex: 1, color: '#fff', paddingHorizontal: 12 },
-    runAgentBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center' },
-    agentStep: { padding: 12, marginBottom: 12 },
-    stepHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-    stepType: { fontSize: 10, fontWeight: 'bold' },
-    stepTs: { fontSize: 10, color: THEME.textSecondary },
-    stepText: { color: '#fff', fontSize: 14 },
-    stepImage: { width: '100%', aspectRatio: 1, borderRadius: 8, marginTop: 8 },
-    agentStep_goal: { borderColor: THEME.secondary },
-    agentStep_thinking: { opacity: 0.6 },
-    agentStep_thought: { fontStyle: 'italic' },
-    agentStep_tool_call: { borderColor: THEME.primary },
-    agentStep_observation: { borderColor: THEME.accent },
-    agentStep_done: { borderColor: THEME.success },
-    agentStep_error: { borderColor: THEME.error },
-  });
+  const renderChat = () => (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Model picker */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.modelBar} contentContainerStyle={{ paddingHorizontal: 16 }}>
+        {MODELS.map(m => (
+          <TouchableOpacity key={m.id} onPress={() => setModel(m.id)} style={[S.modelChip, model === m.id && { borderColor: m.color, backgroundColor: m.color + '22' }]}>
+            <Ionicons name={m.icon} size={14} color={model === m.id ? m.color : C.gray} />
+            <Text style={[S.modelChipText, { color: model === m.id ? m.color : C.gray }]}>{m.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      <ScrollView ref={chatScroll} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+        {msgs.map(m => <ChatBubble key={m.id} msg={m} />)}
+        {chatLoading && (
+          <View style={[S.bubble, S.bubbleAI]}>
+            <ActivityIndicator size="small" color={C.purple} />
+          </View>
+        )}
+      </ScrollView>
+      <View style={S.chatBar}>
+        <Glass style={S.chatInputGlass}>
+          <TextInput style={S.chatInput} value={chatInput} onChangeText={setChatInput}
+            placeholder="اكتب رسالتك..." placeholderTextColor={C.gray} multiline />
+          <TouchableOpacity onPress={sendChat} disabled={chatLoading || !chatInput.trim()}>
+            <LinearGradient colors={[C.purple, C.purpleDark]} style={S.sendBtn}>
+              <Ionicons name="send" size={18} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </Glass>
+      </View>
+    </KeyboardAvoidingView>
+  );
 
-  // END OF NEBULA STUDIO PRO CORE
-  
+  const renderVision = () => (
+    <ScrollView contentContainerStyle={S.sectionPad}>
+      <Text style={S.sectionTitle}>👁 تفكير بصري</Text>
+      <Text style={S.sectionSub}>نموذج Vision 90B · يحلل الصور بدقة عالية</Text>
+      <TouchableOpacity onPress={pickImage} style={S.dropZone}>
+        {visImg ? (
+          <Image source={{ uri: visImg.uri }} style={S.dropImg} />
+        ) : (
+          <View style={S.dropContent}>
+            <Ionicons name="image-outline" size={64} color={C.pink} />
+            <Text style={{ color: C.gray, marginTop: 12, fontSize: 16 }}>اضغط لاختيار صورة</Text>
+            <Text style={{ color: C.grayDark, marginTop: 4, fontSize: 12 }}>JPG, PNG, WEBP</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+      <Glass style={{ padding: 12, marginBottom: 16 }}>
+        <Text style={{ color: C.gray, fontSize: 12, marginBottom: 6 }}>سؤالك عن الصورة:</Text>
+        <TextInput
+          style={{ color: C.white, fontSize: 14, minHeight: 60 }}
+          value={visPrompt}
+          onChangeText={setVisPrompt}
+          multiline
+          placeholder="حلّل هذه الصورة..."
+          placeholderTextColor={C.grayDark}
+        />
+      </Glass>
+      <GBtn onPress={analyzeVision} disabled={!visImg || visLoading}
+        colors={[C.pink, '#be185d']} icon="eye-outline"
+        label={visLoading ? 'يحلل...' : 'تحليل الصورة بالذكاء الاصطناعي'} />
+      {visLoading && <ActivityIndicator color={C.pink} size="large" style={{ marginTop: 24 }} />}
+      {visResult !== '' && (
+        <Glass style={S.resultCard} glow={C.pink}>
+          <Text style={{ color: C.pink, fontSize: 12, fontWeight: '700', marginBottom: 10 }}>🧠 التحليل البصري:</Text>
+          <Text style={{ color: C.white, lineHeight: 24, fontSize: 15 }}>{visResult}</Text>
+        </Glass>
+      )}
+    </ScrollView>
+  );
+
+  const renderSearch = () => (
+    <View style={{ flex: 1 }}>
+      <View style={S.sectionPad}>
+        <Text style={S.sectionTitle}>🌐 تصفح الإنترنت</Text>
+        <Text style={S.sectionSub}>Jina AI · جلب محتوى حقيقي من الويب</Text>
+        <Glass style={S.searchBar2} glow={srchLoading ? C.cyan : undefined}>
+          <Ionicons name="search-outline" size={20} color={C.cyan} style={{ marginRight: 8 }} />
+          <TextInput style={S.searchInput2} value={srchQ} onChangeText={setSrchQ}
+            placeholder="ابحث عن أي شيء..." placeholderTextColor={C.gray}
+            onSubmitEditing={doSearch} returnKeyType="search" />
+          <TouchableOpacity onPress={doSearch}>
+            <LinearGradient colors={[C.cyan, C.blue]} style={{ borderRadius: 16, padding: 8 }}>
+              <Ionicons name="arrow-forward" size={16} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </Glass>
+      </View>
+      {srchLoading && <ActivityIndicator color={C.cyan} size="large" style={{ marginTop: 40 }} />}
+      <FlatList data={srchResults} keyExtractor={(_, i) => i.toString()} contentContainerStyle={S.sectionPad}
+        renderItem={({ item, index }) => (
+          <Glass style={S.srchCard} glow={index === 0 ? C.cyan + '44' : undefined}>
+            <Text style={{ color: C.cyan, fontSize: 15, fontWeight: '700', marginBottom: 6 }} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <Text style={{ color: C.gray, fontSize: 12, marginBottom: 8 }} numberOfLines={1}>{item.url}</Text>
+            <Text style={{ color: C.white, fontSize: 13, lineHeight: 20 }} numberOfLines={5}>
+              {item.content?.slice(0, 300)}
+            </Text>
+            <TouchableOpacity onPress={() => Linking.openURL(item.url)} style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="open-outline" size={14} color={C.cyan} />
+              <Text style={{ color: C.cyan, fontSize: 12, marginLeft: 4 }}>فتح في المتصفح</Text>
+            </TouchableOpacity>
+          </Glass>
+        )} />
+    </View>
+  );
+
+  const renderCreate = () => (
+    <ScrollView contentContainerStyle={S.sectionPad}>
+      <Text style={S.sectionTitle}>🎨 الإبداع بالذكاء الاصطناعي</Text>
+      <Text style={S.sectionSub}>Pollinations AI · 1024×1024 · Storyboard تلقائي</Text>
+      <Glass style={{ padding: 16, marginBottom: 16 }}>
+        <TextInput style={{ color: C.white, fontSize: 15, minHeight: 80 }}
+          value={createPrompt} onChangeText={setCreatePrompt}
+          placeholder="صف ما تريد إنشاءه..." placeholderTextColor={C.grayDark} multiline />
+      </Glass>
+      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+        <GBtn onPress={genImage} colors={[C.gold, '#b45309']} icon="image-outline" label="صورة" style={{ flex: 1 }} />
+        <GBtn onPress={genStoryboard} disabled={createLoading} colors={[C.orange, '#c2410c']} icon="film-outline" label="Storyboard" style={{ flex: 1 }} />
+      </View>
+      {createLoading && <ActivityIndicator color={C.gold} size="large" style={{ marginTop: 20 }} />}
+      {createImg && !storyboard && (
+        <View style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 16 }}>
+          <Image source={{ uri: createImg }} style={{ width: '100%', aspectRatio: 1 }} resizeMode="cover" />
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)']} style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16 }}>
+            <TouchableOpacity onPress={() => Share.share({ url: createImg })}>
+              <Text style={{ color: C.gold, fontWeight: '700' }}>⬇ مشاركة الصورة</Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      )}
+      {storyboard && (
+        <View>
+          <Text style={{ color: C.white, fontSize: 16, fontWeight: '700', marginBottom: 12 }}>🎬 Storyboard:</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+            {storyboard.map((s, i) => (
+              <Glass key={i} style={{ width: (width - 52) / 2, borderRadius: 16, overflow: 'hidden' }}>
+                <Image source={{ uri: s.url }} style={{ width: '100%', aspectRatio: 1 }} />
+                <View style={{ padding: 8 }}>
+                  <Text style={{ color: C.gold, fontSize: 11, fontWeight: '700' }}>مشهد {s.scene}</Text>
+                  <Text style={{ color: C.white, fontSize: 11, marginTop: 4 }}>{s.title}</Text>
+                </View>
+              </Glass>
+            ))}
+          </View>
+          <GBtn onPress={() => setStoryboard(null)} colors={[C.grayDark, '#1e293b']} icon="trash-outline" label="مسح" style={{ marginTop: 16 }} />
+        </View>
+      )}
+    </ScrollView>
+  );
+
+  const renderBuild = () => (
+    <ScrollView contentContainerStyle={S.sectionPad}>
+      <Text style={S.sectionTitle}>⚙ بناء التطبيقات</Text>
+      <Text style={S.sectionSub}>Llama 4 Maverick · React Native · رفع تلقائي GitHub</Text>
+      <Glass style={{ padding: 16, marginBottom: 16 }}>
+        <TextInput style={{ color: C.white, fontSize: 15, minHeight: 120 }}
+          value={buildPrompt} onChangeText={setBuildPrompt}
+          placeholder="صف التطبيق الذي تريد بناءه..." placeholderTextColor={C.grayDark} multiline />
+      </Glass>
+      <GBtn onPress={doBuild} disabled={buildLoading}
+        colors={[C.teal, '#0f766e']} icon="rocket-outline"
+        label={buildLoading ? 'يبني...' : 'ابنِ التطبيق'} />
+      {buildLoading && <ActivityIndicator color={C.teal} size="large" style={{ marginTop: 20 }} />}
+      {buildCode !== '' && (
+        <Glass style={{ padding: 16, marginTop: 20, backgroundColor: '#000' }} glow={C.teal}>
+          <Text style={{ color: C.teal, fontSize: 12, fontWeight: '700', marginBottom: 8 }}>الكود المولّد:</Text>
+          <ScrollView horizontal>
+            <Text style={{ color: '#4ade80', fontFamily: 'monospace', fontSize: 11, lineHeight: 18 }}>
+              {buildCode.slice(0, 3000)}
+            </Text>
+          </ScrollView>
+          {commitUrl !== '' && (
+            <TouchableOpacity onPress={() => Linking.openURL(commitUrl)} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+              <Ionicons name="logo-github" size={16} color={C.green} />
+              <Text style={{ color: C.green, marginLeft: 6, fontSize: 13 }}>تم الرفع على GitHub ✓</Text>
+            </TouchableOpacity>
+          )}
+        </Glass>
+      )}
+    </ScrollView>
+  );
+
+  const renderVault = () => <VaultScreen keys={keys} saveKey={saveKey} />;
+
+  const tabContent = {
+    Agent: renderAgent,
+    Chat: renderChat,
+    Vision: renderVision,
+    Search: renderSearch,
+    Create: renderCreate,
+    Build: renderBuild,
+    Vault: renderVault,
+  };
+
+  const activeTab = TABS.find(t => t.id === tab);
+
+  return (
+    <SafeAreaView style={S.root}>
+      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
+      <StarBed />
+      <NebulaOrbs />
+
+      {/* Header */}
+      <LinearGradient colors={['rgba(3,1,10,0.98)', 'rgba(3,1,10,0.85)']} style={S.header}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <LinearGradient colors={[C.purple, C.purpleDark]} style={S.logoBox}>
+            <Text style={S.logoText}>N</Text>
+          </LinearGradient>
+          <View style={{ marginLeft: 10 }}>
+            <Text style={S.appName}>NEBULA STUDIO PRO</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <PulseDot color={C.green} size={6} />
+              <Text style={{ color: C.green, fontSize: 10, fontWeight: '600' }}>24 TOOLS · ONLINE</Text>
+            </View>
+          </View>
+        </View>
+        <TouchableOpacity onPress={() => setTab('Vault')}>
+          <LinearGradient colors={['rgba(139,92,246,0.2)', 'rgba(109,40,217,0.2)']} style={{ borderRadius: 12, padding: 8, borderWidth: 1, borderColor: C.purple + '44' }}>
+            <Ionicons name="lock-closed-outline" size={20} color={C.purple} />
+          </LinearGradient>
+        </TouchableOpacity>
+      </LinearGradient>
+
+      {/* Content */}
+      <View style={{ flex: 1 }}>
+        {tabContent[tab]?.()}
+      </View>
+
+      {/* Bottom Nav */}
+      <View style={S.bottomNav}>
+        <LinearGradient colors={['rgba(3,1,10,0.97)', 'rgba(7,3,15,0.99)']} style={S.bottomNavInner}>
+          {TABS.map(t => {
+            const active = tab === t.id;
+            return (
+              <TouchableOpacity key={t.id} onPress={() => setTab(t.id)} style={S.navItem}>
+                {active && (
+                  <LinearGradient colors={[t.color + '33', t.color + '11']} style={S.navActiveGlow} />
+                )}
+                <Ionicons name={t.icon} size={22} color={active ? t.color : C.grayDark} />
+                <Text style={[S.navLabel, { color: active ? t.color : C.grayDark }]}>{t.label}</Text>
+                {active && <View style={[S.navDot, { backgroundColor: t.color }]} />}
+              </TouchableOpacity>
+            );
+          })}
+        </LinearGradient>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ─── AGENT STEP CARD ──────────────────────────
+const STEP_STYLES = {
+  goal: { color: C.cyan, icon: 'flag-outline', bg: C.cyan + '15', border: C.cyan + '40' },
+  thinking: { color: C.grayDark, icon: 'ellipsis-horizontal', bg: 'transparent', border: 'transparent' },
+  thought: { color: C.gold, icon: 'bulb-outline', bg: C.gold + '10', border: C.gold + '30' },
+  tool_call: { color: C.purple, icon: 'construct-outline', bg: C.purple + '15', border: C.purple + '40' },
+  observation: { color: C.teal, icon: 'eye-outline', bg: C.teal + '10', border: C.teal + '30' },
+  done: { color: C.green, icon: 'checkmark-circle-outline', bg: C.green + '15', border: C.green + '40' },
+  error: { color: C.red, icon: 'alert-circle-outline', bg: C.red + '15', border: C.red + '40' },
+};
+
+const AgentStepCard = ({ step }) => {
+  const st = STEP_STYLES[step.type] || STEP_STYLES.thought;
+  if (step.type === 'thinking') return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+      <ActivityIndicator size="small" color={C.purple} />
+      <Text style={{ color: C.grayDark, fontSize: 12 }}>{step.content}</Text>
+    </View>
+  );
+  return (
+    <View style={{ backgroundColor: st.bg, borderWidth: 1, borderColor: st.border, borderRadius: 14, padding: 14, marginBottom: 12 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Ionicons name={st.icon} size={14} color={st.color} />
+          <Text style={{ color: st.color, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 }}>
+            {step.type === 'tool_call' ? `أداة: ${step.tool}` : step.type}
+          </Text>
+        </View>
+        <Text style={{ color: C.grayDark, fontSize: 10 }}>{step.ts}</Text>
+      </View>
+      {step.type === 'tool_call' && step.args && (
+        <View style={{ backgroundColor: '#000', borderRadius: 8, padding: 8, marginBottom: 8 }}>
+          <Text style={{ color: C.purple, fontFamily: 'monospace', fontSize: 11 }}>
+            {JSON.stringify(step.args, null, 2).slice(0, 300)}
+          </Text>
+        </View>
+      )}
+      <Text style={{ color: C.white, lineHeight: 22, fontSize: 14 }}>{step.content}</Text>
+      {step.imageUrl && (
+        <View style={{ borderRadius: 12, overflow: 'hidden', marginTop: 10 }}>
+          <Image source={{ uri: step.imageUrl }} style={{ width: '100%', aspectRatio: 1 }} resizeMode="cover" />
+        </View>
+      )}
+    </View>
+  );
+};
+
+// ─── CHAT BUBBLE ──────────────────────────────
+const ChatBubble = ({ msg }) => {
+  const isUser = msg.role === 'user';
+  return (
+    <View style={[S.msgWrap, isUser ? S.msgWrapUser : S.msgWrapAI]}>
+      {!isUser && (
+        <LinearGradient colors={[C.purple, C.purpleDark]} style={S.msgAvatar}>
+          <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>N</Text>
+        </LinearGradient>
+      )}
+      <View style={[S.bubble, isUser ? S.bubbleUser : S.bubbleAI]}>
+        <Text style={S.msgText}>{msg.content}</Text>
+      </View>
+    </View>
+  );
+};
+
+// ─── VAULT SCREEN ─────────────────────────────
+const VaultScreen = ({ keys, saveKey }) => {
+  const fields = [
+    { k: 'GITHUB', label: 'GitHub Token', icon: 'logo-github', color: C.white, hint: 'ghp_...' },
+    { k: 'JINA', label: 'Jina AI Key', icon: 'search', color: C.cyan, hint: 'jina_...' },
+    { k: 'GROQ_OVR', label: 'Groq Override', icon: 'key-outline', color: C.purple, hint: 'gsk_...' },
+  ];
+  return (
+    <ScrollView contentContainerStyle={S.sectionPad}>
+      <Text style={S.sectionTitle}>🔐 Neural Vault</Text>
+      <Text style={S.sectionSub}>مشفّر بـ Android Keystore</Text>
+      {fields.map(f => <VaultField key={f.k} {...f} value={keys[f.k]} onSave={v => saveKey(f.k, v)} />)}
+      <Glass style={{ padding: 16, marginTop: 8 }}>
+        <Text style={{ color: C.gray, fontSize: 13, lineHeight: 22 }}>
+          🔑 مفاتيح Groq (1-7): محفوظة داخل الـ APK{'\n'}
+          يمكنك إضافة Groq Override لاستخدام مفتاحك الخاص
+        </Text>
+      </Glass>
+    </ScrollView>
+  );
+};
+
+const VaultField = ({ k, label, icon, color, hint, value, onSave }) => {
+  const [v, setV] = useState(value || '');
+  const [saved, setSaved] = useState(false);
+  const save = () => { onSave(v); setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  return (
+    <Glass style={{ padding: 16, marginBottom: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+        <Ionicons name={icon} size={18} color={color} />
+        <Text style={{ color, fontSize: 13, fontWeight: '700' }}>{label}</Text>
+        {saved && <Badge label="✓ محفوظ" color={C.green} />}
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <TextInput style={{ flex: 1, color: C.white, borderBottomWidth: 1, borderBottomColor: C.glassBorder, paddingVertical: 8, fontSize: 14 }}
+          value={v} onChangeText={setV} secureTextEntry placeholder={hint} placeholderTextColor={C.grayDark} />
+        <TouchableOpacity onPress={save}>
+          <LinearGradient colors={[C.purple, C.purpleDark]} style={{ borderRadius: 20, padding: 10 }}>
+            <Ionicons name="checkmark" size={16} color="#fff" />
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </Glass>
+  );
+};
+
+// ════════════════════════════════════════════════
+//  STYLESHEET — MAXIMUM QUALITY
+// ════════════════════════════════════════════════
+const S = StyleSheet.create({
+  root: { flex: 1, backgroundColor: C.bg },
+  orb: { position: 'absolute' },
+
+  // Header
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.glassBorder },
+  logoBox: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  logoText: { color: '#fff', fontSize: 20, fontWeight: '900', fontStyle: 'italic' },
+  appName: { color: C.white, fontSize: 15, fontWeight: '900', letterSpacing: 3 },
+
+  // Glass
+  glass: { backgroundColor: C.glass, borderRadius: 16, borderWidth: 1, borderColor: C.glassBorder },
+
+  // Gradient button
+  gbtnWrap: { height: 50, borderRadius: 25, overflow: 'hidden' },
+  gbtnInner: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 25 },
+  gbtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // Bottom nav
+  bottomNav: { borderTopWidth: 1, borderTopColor: C.glassBorder },
+  bottomNavInner: { flexDirection: 'row', paddingVertical: 8, paddingBottom: Platform.OS === 'ios' ? 20 : 8 },
+  navItem: { flex: 1, alignItems: 'center', paddingVertical: 4, position: 'relative' },
+  navActiveGlow: { position: 'absolute', top: -4, left: 4, right: 4, bottom: -4, borderRadius: 14 },
+  navLabel: { fontSize: 9, marginTop: 3, fontWeight: '600' },
+  navDot: { width: 3, height: 3, borderRadius: 2, marginTop: 2 },
+
+  // Section
+  sectionPad: { padding: 16 },
+  sectionTitle: { color: C.white, fontSize: 22, fontWeight: '900', marginBottom: 4 },
+  sectionSub: { color: C.gray, fontSize: 12, marginBottom: 20 },
+
+  // Agent
+  inputGlass: { padding: 12 },
+  agentInput: { color: C.white, fontSize: 15, minHeight: 80 },
+
+  // Chat
+  modelBar: { maxHeight: 44, marginVertical: 8 },
+  modelChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.glass, borderWidth: 1, borderColor: C.glassBorder, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, marginRight: 8 },
+  modelChipText: { fontSize: 12, fontWeight: '600', marginLeft: 6 },
+  chatBar: { padding: 12, borderTopWidth: 1, borderTopColor: C.glassBorder },
+  chatInputGlass: { flexDirection: 'row', alignItems: 'flex-end', padding: 10, gap: 10 },
+  chatInput: { flex: 1, color: C.white, fontSize: 15, maxHeight: 100 },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  msgWrap: { flexDirection: 'row', marginBottom: 14, maxWidth: '88%' },
+  msgWrapUser: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
+  msgWrapAI: { alignSelf: 'flex-start' },
+  msgAvatar: { width: 28, height: 28, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
+  bubble: { borderRadius: 16, padding: 12, maxWidth: '100%' },
+  bubbleUser: { backgroundColor: C.purple + 'cc', borderBottomRightRadius: 4 },
+  bubbleAI: { backgroundColor: C.glass, borderWidth: 1, borderColor: C.glassBorder, borderBottomLeftRadius: 4 },
+  msgText: { color: C.white, fontSize: 14, lineHeight: 22 },
+
+  // Vision
+  dropZone: { height: 220, borderRadius: 20, borderWidth: 2, borderColor: C.pink + '44', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginBottom: 16, overflow: 'hidden', backgroundColor: C.pink + '08' },
+  dropImg: { width: '100%', height: '100%', borderRadius: 18 },
+  dropContent: { alignItems: 'center' },
+  resultCard: { padding: 16, marginTop: 16 },
+
+  // Search
+  searchBar2: { flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 4 },
+  searchInput2: { flex: 1, color: C.white, fontSize: 15 },
+  srchCard: { padding: 16, marginBottom: 14 },
+});
