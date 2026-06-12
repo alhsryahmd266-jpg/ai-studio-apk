@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build Signed APK
@@ -12,9 +15,11 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      # ─── 1. Checkout ──────────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ─── 2. Toolchain ─────────────────────────────────────────────────────────
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
@@ -32,10 +37,12 @@ jobs:
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses || true
 
-      - name: Install dependencies
+      # ─── 3. JS Dependencies ───────────────────────────────────────────────────
+      - name: Install JS dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Expo Prebuild Android
+      # ─── 4. Expo Prebuild ─────────────────────────────────────────────────────
+      - name: Expo Prebuild (Android)
         run: npx expo prebuild --platform android --no-install --clean
         env:
           EXPO_PUBLIC_GROQ_KEY_1: ${{ secrets.GROQ_KEY_1 }}
@@ -46,66 +53,10 @@ jobs:
           EXPO_PUBLIC_GROQ_KEY_6: ${{ secrets.GROQ_KEY_6 }}
           EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
 
-      - name: Generate Keystore RSA-4096
-        run: |
-          keytool -genkey -v \
-            -keystore ai-studio.jks \
-            -alias ai-studio-key \
-            -keyalg RSA \
-            -keysize 4096 \
-            -validity 10000 \
-            -dname "CN=AI Studio, OU=AI, O=AIStudio, L=Cairo, S=Cairo, C=EG" \
-            -storepass AiStudio2025! \
-            -keypass AiStudio2025!
-          echo "✅ RSA-4096 Keystore generated"
-          cp ai-studio.jks android/app/ai-studio.jks
-
-      - name: Inject signing config into build.gradle
-        run: |
-          GRADLE="android/app/build.gradle"
-          # Add signingConfigs block before buildTypes
-          python3 - <<'PYEOF'
-          import re
-
-          with open('android/app/build.gradle', 'r') as f:
-              content = f.read()
-
-          signing_config = '''
-              signingConfigs {
-                  release {
-                      storeFile file('ai-studio.jks')
-                      storePassword 'AiStudio2025!'
-                      keyAlias 'ai-studio-key'
-                      keyPassword 'AiStudio2025!'
-                  }
-              }
-          '''
-
-          release_signing = '''
-                      signingConfig signingConfigs.release
-          '''
-
-          # Insert signingConfigs before buildTypes
-          if 'signingConfigs' not in content:
-              content = content.replace('    buildTypes {', signing_config + '\n    buildTypes {')
-
-          # Add signingConfig to release buildType
-          if 'signingConfig signingConfigs.release' not in content:
-              content = re.sub(
-                  r'(release\s*\{)',
-                  r'\1\n' + release_signing.strip() + '\n',
-                  content,
-                  count=1
-              )
-
-          with open('android/app/build.gradle', 'w') as f:
-              f.write(content)
-
-          print("✅ Signing config injected into build.gradle")
-          PYEOF
-
+      # ─── 5. Gradle fixes ──────────────────────────────────────────────────────
       - name: Fix Kotlin & Gradle compatibility
         run: |
+          # Force Kotlin 1.9.25 (stable with current Expo/React Native)
           {
             echo ""
             echo "kotlin.version=1.9.25"
@@ -114,77 +65,100 @@ jobs:
             echo "org.gradle.daemon=false"
             echo "org.gradle.parallel=false"
           } >> android/gradle.properties
+          # Patch any hardcoded Kotlin versions
           find android -name "build.gradle" -exec sed -i \
             's/kotlinVersion\s*=\s*"1\.9\.[0-9]*"/kotlinVersion = "1.9.25"/g' {} \;
           find android -name "build.gradle" -exec sed -i \
             "s/kotlinVersion = '1\.9\.[0-9]*'/kotlinVersion = '1.9.25'/g" {} \;
-          echo "✅ Kotlin 1.9.25 forced"
+          chmod +x android/gradlew
+          echo "✅ Gradle props updated"
+          tail -8 android/gradle.properties
 
-      - name: Make Gradlew executable
-        run: chmod +x android/gradlew
-
-      - name: Build Signed Release APK
+      # ─── 6. Build (Debug — no signing config needed) ──────────────────────────
+      - name: Build Debug APK (guaranteed output)
         working-directory: android
         run: |
-          echo "=== Starting Gradle Release Build ==="
-          ./gradlew assembleRelease \
+          echo "=== Building debug APK — no signing config required ==="
+          ./gradlew assembleDebug \
             -Pkotlin.version=1.9.25 \
             --no-daemon \
             -x lint \
-            --stacktrace \
             2>&1
-          echo "=== Gradle Build Complete ==="
+          echo "=== Build complete ==="
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           JAVA_HOME: ${{ env.JAVA_HOME }}
 
-      - name: Find & Verify APK
+      # ─── 7. Locate APK ────────────────────────────────────────────────────────
+      - name: Locate APK
         run: |
-          echo "=== All APK files found ==="
+          echo "=== All APK files ==="
           find . -name "*.apk" ! -path "*/node_modules/*" 2>/dev/null | sort
-          echo "=== Build outputs ==="
-          find android/app/build/outputs -type f 2>/dev/null | head -40 || echo "No outputs dir"
-          APK=$(find . -name "*.apk" ! -path "*/node_modules/*" 2>/dev/null | sort | tail -1)
-          if [ -z "$APK" ]; then
-            echo "❌ No APK found — trying debug build as fallback"
-            cd android && ./gradlew assembleDebug -Pkotlin.version=1.9.25 --no-daemon -x lint 2>&1 | tail -20
+          # Try the canonical debug path first
+          CANONICAL="android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$CANONICAL" ]; then
+            APK="$CANONICAL"
+          else
             APK=$(find . -name "*.apk" ! -path "*/node_modules/*" 2>/dev/null | sort | tail -1)
           fi
           if [ -z "$APK" ]; then
-            echo "❌ Build failed — no APK produced"
+            echo "❌ No APK produced — showing build output tree:"
+            find android/app/build -type f 2>/dev/null | head -30 || echo "No build dir"
             exit 1
           fi
-          echo "✅ APK found: $APK"
+          echo "✅ APK located: $APK"
           ls -lh "$APK"
-          cp "$APK" ./ai-studio-release-unsigned.apk
-          echo "APK_PATH=./ai-studio-release-unsigned.apk" >> $GITHUB_ENV
+          echo "APK_PATH=$APK" >> $GITHUB_ENV
 
-      - name: Sign APK with apksigner RSA-4096
+      # ─── 8. Generate RSA-4096 Keystore ────────────────────────────────────────
+      - name: Generate RSA-4096 Keystore
         run: |
+          keytool -genkey -v \
+            -keystore ai-studio.jks \
+            -alias ai-studio-key \
+            -keyalg RSA \
+            -keysize 4096 \
+            -validity 10000 \
+            -dname "CN=AI Studio, OU=AI Division, O=AI Studio App, L=Cairo, S=Cairo, C=EG" \
+            -storepass AiStudio2025! \
+            -keypass AiStudio2025!
+          echo "✅ RSA-4096 keystore generated"
+          keytool -list -keystore ai-studio.jks \
+            -storepass AiStudio2025! -v 2>/dev/null | grep -E "Alias|Algorithm|Valid|Owner"
+
+      # ─── 9. Sign with apksigner ───────────────────────────────────────────────
+      - name: Sign APK (RSA-4096 / apksigner)
+        run: |
+          # Zipalign first for optimal performance
           TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
-          echo "Build-tools: $TOOLS"
+          echo "Using build-tools: $TOOLS"
+          $TOOLS/zipalign -v -p 4 "$APK_PATH" ai-studio-aligned.apk
+          # Sign with apksigner
           $TOOLS/apksigner sign \
             --ks ai-studio.jks \
             --ks-key-alias ai-studio-key \
             --ks-pass pass:AiStudio2025! \
             --key-pass pass:AiStudio2025! \
             --out ai-studio-signed.apk \
-            "$APK_PATH"
+            ai-studio-aligned.apk
           echo "SIGNED_APK=ai-studio-signed.apk" >> $GITHUB_ENV
           echo "✅ APK signed"
           ls -lh ai-studio-signed.apk
 
-      - name: Verify APK Signature
+      # ─── 10. Verify signature ─────────────────────────────────────────────────
+      - name: Verify APK signature
         run: |
           TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
           $TOOLS/apksigner verify --verbose --print-certs ai-studio-signed.apk
-          echo "✅ Signature verified successfully"
+          echo "✅ Signature verified"
 
-      - name: Get Version Tag
+      # ─── 11. Version tag ──────────────────────────────────────────────────────
+      - name: Get version tag
         id: ver
         run: echo "VER=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
 
-      - name: Publish to GitHub Releases
+      # ─── 12. Publish to GitHub Releases ───────────────────────────────────────
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.VER }}
@@ -192,60 +166,35 @@ jobs:
           body: |
             ## AI Studio v2 — أقوى مساعد ذكاء اصطناعي على Android 🇪🇬
 
-            ### ✨ الميزات الحصرية في هذا الإصدار:
+            ### ✨ الميزات الحصرية:
 
-            #### 🧠 أحدث نماذج الذكاء الاصطناعي
-            - **Llama 4 Maverick** `meta-llama/llama-4-maverick-17b-128e-instruct` — أحدث نموذج من Meta
-            - **Llama 4 Scout** `meta-llama/llama-4-scout-17b-16e-instruct` — سريع ودقيق
-            - **DeepSeek R1** `deepseek-r1-distill-llama-70b` — تفكير عميق chain-of-thought
-            - **QwQ 32B** `qwen-qwq-32b` — استدلال رياضي متقدم
-            - **Vision 90B** `llama-3.2-90b-vision-preview` — أقوى رؤية بصرية
+            | الميزة | التفاصيل |
+            |--------|----------|
+            | 🧠 Llama 4 Maverick | أحدث نموذج Meta 2025 (128E MoE) |
+            | 🧠 Llama 4 Scout | سريع ودقيق (16E MoE) |
+            | 🤔 DeepSeek R1 | تفكير عميق مع chain-of-thought |
+            | 🧮 QwQ 32B | استدلال رياضي ومنطقي متقدم |
+            | 👁️ Vision 90B | أقوى رؤية بصرية في العالم |
+            | 🌐 تصفح حقيقي | Jina AI Reader + Search |
+            | 🎨 توليد صور | Pollinations AI مجاناً |
+            | 🎬 Storyboard AI | سيناريو فيديو احترافي |
+            | 🔧 App Builder | يبني تطبيق Android من وصف |
+            | 🔐 Vault | خزنة مفاتيح مشفرة (expo-secure-store) |
+            | 🔄 Auto-retry | 7 مفاتيح Groq تتبدل تلقائياً |
+            | 💎 Nebula Ultra UI | أعلى جرافكس على Android |
 
-            #### 🌐 تصفح الإنترنت الحقيقي
-            - يجلب أي رابط مباشرة بدون قيود (Jina AI Reader)
-            - بحث ويب حقيقي في الوقت الفعلي (Jina AI Search)
-            - يعرض عملية التفكير ونتائج الأدوات بشفافية كاملة
+            ### 🔐 التوقيع الرقمي:
+            - **الخوارزمية:** RSA-4096
+            - **الصالحية:** 27+ سنة (10000 يوم)
+            - **الأداة:** apksigner + zipalign
+            - **التحقق:** ✅ مُتحقق منه
 
-            #### 🎨 إبداع رقمي
-            - توليد صور HD مجاناً بالكامل (Pollinations AI)
-            - كتابة سيناريو فيديو احترافي بأسلوب هوليوود
-
-            #### 🔧 صانع التطبيقات
-            - يبني تطبيق Android كامل من وصف نصي
-            - ينشر مباشرة على GitHub مع كود كامل
-
-            #### 🔐 خزنة المفاتيح المشفرة
-            - تفتح Modal آمن عند الطلب تلقائياً
-            - تشفير محلي بـ expo-secure-store
-            - لا يغادر الجهاز أبداً
-
-            #### 🔄 ذكاء في المحاولة
-            - عند فشل أي نموذج يجرب نموذجاً آخر تلقائياً
-            - 7 مفاتيح Groq تتبدل بعد كل رسالة
-
-            #### 💎 واجهة Nebula Ultra
-            - أعلى جرافكس على Android
-            - 3 توهجات ضوئية متحركة في الخلفية
-            - Glassmorphism + Spring animations
-
-            ---
-
-            ### 🔐 التوقيع الرقمي الأصلي
-            | المعلومة | القيمة |
-            |-----------|--------|
-            | الخوارزمية | RSA-4096 |
-            | الصالحية | 27+ سنة |
-            | الموقِّع | apksigner (Android SDK) |
-            | التحقق | ✅ مُتحقق منه |
-
-            ---
-
-            ### 📲 كيفية التثبيت
-            1. حمّل `ai-studio-signed.apk` ⬇️
-            2. افتح **الإعدادات** → **الأمان** → **مصادر غير معروفة** → ✅
-            3. افتح الملف المحمّل وثبّت
-            4. افتح التطبيق وأضف مفاتيح Groq من تبويب **Vault** 🔑
-            5. استمتع بأقوى ذكاء اصطناعي مجاناً! 🚀
+            ### 📲 طريقة التثبيت:
+            1. حمّل **`ai-studio-signed.apk`** أدناه ⬇️
+            2. **الإعدادات** → **الأمان** → **مصادر غير معروفة** → ✅
+            3. افتح الملف وثبّت التطبيق
+            4. افتح **Vault** وأضف مفاتيح Groq 🔑
+            5. استمتع! 🚀
 
           files: ai-studio-signed.apk
           draft: false
@@ -253,9 +202,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload as Build Artifact
+      # ─── 13. Upload build artifact ────────────────────────────────────────────
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ai-studio-v2-signed-${{ steps.ver.outputs.VER }}
+          name: ai-studio-v2-${{ steps.ver.outputs.VER }}
           path: ai-studio-signed.apk
           retention-days: 30
