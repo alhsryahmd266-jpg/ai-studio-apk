@@ -42,10 +42,7 @@ jobs:
           echo "=== Searching for Compose Compiler 1.5.15 in node_modules ==="
           find node_modules -name "build.gradle" | xargs grep -l "1\.5\.15" 2>/dev/null | while read f; do
             echo "Patching: $f"
-            grep -n "1\.5\.15\|composeOptions" "$f" || true
             sed -i 's/1\.5\.15/1.5.14/g' "$f"
-            echo "--- After patch:"
-            grep -n "1\.5\.1[0-9]\|composeOptions" "$f" || true
           done
           echo "=== Done patching ==="
 
@@ -75,6 +72,28 @@ jobs:
           echo "=== gradle.properties ==="
           cat android/gradle.properties
 
+      - name: Bundle JavaScript into APK (fix standalone mode)
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res/ \
+            --reset-cache
+          echo "=== Bundle size ==="
+          du -h android/app/src/main/assets/index.android.bundle
+        env:
+          EXPO_PUBLIC_GROQ_KEY_1: ${{ secrets.GROQ_KEY_1 }}
+          EXPO_PUBLIC_GROQ_KEY_2: ${{ secrets.GROQ_KEY_2 }}
+          EXPO_PUBLIC_GROQ_KEY_3: ${{ secrets.GROQ_KEY_3 }}
+          EXPO_PUBLIC_GROQ_KEY_4: ${{ secrets.GROQ_KEY_4 }}
+          EXPO_PUBLIC_GROQ_KEY_5: ${{ secrets.GROQ_KEY_5 }}
+          EXPO_PUBLIC_GROQ_KEY_6: ${{ secrets.GROQ_KEY_6 }}
+          EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
+          EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
+
       - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon -x lint --stacktrace 2>&1
@@ -91,7 +110,6 @@ jobs:
           fi
           if [ -z "$APK" ]; then
             echo "ERROR: APK not found"
-            find android/app/build -type f 2>/dev/null | head -20
             exit 1
           fi
           echo "APK: $APK  size: $(du -h "$APK" | cut -f1)"
@@ -138,16 +156,28 @@ jobs:
             ## 🌌 NEBULA STUDIO PRO — AI Agent Mobile App
 
             ### الميزات / Features
-            - 🤖 **Autonomous Agent** — ReAct Loop · 10 tools · Persistent memory
+            - 🤖 **Autonomous Agent** — ReAct Loop · 24 أداة · ذاكرة دائمة
             - 🧠 **6 AI Models** — Llama 4 Maverick · DeepSeek R1 · QwQ 32B · Vision 90B
-            - 🔑 **7 Rotating Groq Keys** — Zero-downtime auto-failover
-            - 👁️ **Vision Analysis** — 90B multimodal model
-            - 🌐 **Web Search** — Jina AI real-time
+            - 🔑 **7 Rotating Groq Keys** — تبديل تلقائي كل رسالة · Zero-downtime failover
+            - 👁️ **Vision Analysis** — نموذج 90B multimodal
+            - 🌐 **Web Search + Fetch** — Jina AI real-time
+            - 🌤️ **Live Weather** — أي مدينة في العالم
+            - 🔍 **GitHub Search** — بحث في المستودعات
             - 🎨 **AI Image Generation** — Pollinations AI 768×768
-            - 🎬 **Video Storyboard** — 4-scene AI generator
-            - 🔧 **Code Builder** — generates & auto-pushes to GitHub
+            - 📊 **Analyze Image** — تحليل صور بالذكاء الاصطناعي
+            - 📝 **Summarize & Translate** — تلخيص وترجمة أي نص
+            - 🗺️ **Create Plan** — تخطيط المهام المعقدة
+            - 🧠 **Deep Think** — تفكير عميق بـ DeepSeek R1
+            - 🔧 **Code Builder** — يكتب كود ويرفعه GitHub تلقائياً
+            - 🔍 **Analyze Code** — مراجعة وتحسين الكود
+            - ⚙️ **Execute Code** — تشغيل JavaScript مباشر
+            - 📁 **Read/List GitHub Files** — قراءة ملفات المستودع
+            - 🐛 **Create GitHub Issues** — إنشاء Issues تلقائياً
+            - 💾 **Persistent Memory** — ذاكرة دائمة (read/save/list)
+            - 🔢 **Calculate** — حسابات رياضية
+            - 📅 **DateTime** — التاريخ والوقت
+            - 📋 **Format JSON** — تنسيق البيانات
             - 🔒 **Encrypted Vault** — Android Keystore secured
-            - ✍️ **Self-Improving** — Agent pushes code to GitHub autonomously
             - 🌌 **World-Class Design** — 80-star field · Glassmorphism · Neon glow
 
             ### التوقيع الرقمي / Digital Signature
