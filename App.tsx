@@ -471,30 +471,59 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 
     // --- TAB: AGENT ---
 
-    const AGENT_SYSTEM = `You are an autonomous AI agent with full tool access.
+    const AGENT_SYSTEM = `You are an autonomous AI agent with 23 professional tools — same capabilities as the world's top AI agents.
   You operate in a ReAct loop: Think → Act → Observe → Repeat.
 
   TOOLS (call with exact syntax):
-    [TOOL: search_web    | {"query":"..."}]
-    [TOOL: fetch_url     | {"url":"https://..."}]
-    [TOOL: calculate     | {"expr":"2+2"}]
-    [TOOL: get_datetime  | {}]
-    [TOOL: generate_image| {"prompt":"..."}]
-    [TOOL: build_app     | {"description":"..."}]
-    [TOOL: push_github   | {"token":"...","repo":"owner/repo","path":"App.tsx","content":"...","message":"..."}]
-    [TOOL: read_memory   | {"key":"..."}]
-    [TOOL: save_memory   | {"key":"...","value":"..."}]
-    [TOOL: fix_error     | {"error":"...","context":"..."}]
+  — WEB & DATA —
+    [TOOL: search_web       | {"query":"..."}]
+    [TOOL: fetch_url        | {"url":"https://..."}]
+    [TOOL: get_weather      | {"city":"Cairo"}]
+    [TOOL: search_github    | {"query":"...","type":"repositories"}]
+
+  — CODE & BUILD —
+    [TOOL: build_app        | {"description":"..."}]
+    [TOOL: analyze_code     | {"code":"...","goal":"review|improve|debug"}]
+    [TOOL: execute_code     | {"code":"..."}]
+    [TOOL: fix_error        | {"error":"...","context":"..."}]
+
+  — GITHUB —
+    [TOOL: push_github      | {"repo":"owner/repo","path":"file.tsx","content":"...","message":"..."}]
+    [TOOL: read_github_file | {"repo":"owner/repo","path":"file.tsx"}]
+    [TOOL: list_github_files| {"repo":"owner/repo","dir":"/"}]
+    [TOOL: create_github_issue | {"repo":"owner/repo","title":"...","body":"..."}]
+
+  — AI & MEDIA —
+    [TOOL: generate_image   | {"prompt":"..."}]
+    [TOOL: analyze_image    | {"url":"https://..."}]
+    [TOOL: summarize_text   | {"text":"...","lang":"ar"}]
+    [TOOL: translate_text   | {"text":"...","to":"en"}]
+
+  — PLANNING & REASONING —
+    [TOOL: create_plan      | {"goal":"...","steps":5}]
+    [TOOL: deep_think       | {"question":"..."}]
+
+  — MEMORY —
+    [TOOL: read_memory      | {"key":"..."}]
+    [TOOL: save_memory      | {"key":"...","value":"..."}]
+    [TOOL: list_memory      | {}]
+
+  — UTILITIES —
+    [TOOL: calculate        | {"expr":"2+2"}]
+    [TOOL: get_datetime     | {}]
+    [TOOL: format_json      | {"data":"..."}]
 
   RULES:
-  1. Start with THOUGHT: analyse the goal.
+  1. Start with THOUGHT: analyse the goal carefully.
   2. Use exactly one tool per step.
   3. After OBSERVATION, decide next step.
   4. Write FINAL ANSWER: when done.
-  5. If something fails, call fix_error to diagnose and retry.
-  6. You have up to 10 iterations — be efficient.`;
+  5. If something fails, call fix_error then retry.
+  6. You have up to 15 iterations — plan efficiently.
+  7. For complex tasks: start with create_plan, then execute each step.`;
 
     const agentTools = {
+      // — WEB & DATA —
       search_web: async ({ query }) => {
         try {
           const r = await fetch('https://s.jina.ai/' + encodeURIComponent(query), { headers: { Accept: 'application/json' } });
@@ -508,19 +537,57 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
           return (await r.text()).slice(0, 3000);
         } catch (e) { return 'Fetch failed: ' + e.message; }
       },
-      calculate: ({ expr }) => { try { return String(eval(expr)); } catch (e) { return 'Calc error: ' + e.message; } },
-      get_datetime: () => new Date().toLocaleString(),
-      generate_image: async ({ prompt }) => 'IMAGE_URL::https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=768&height=768&nologo=true&seed=' + Date.now(),
+      get_weather: async ({ city }) => {
+        try {
+          const r = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`);
+          const d = await r.json();
+          const c = d.current_condition[0];
+          return `${city}: ${c.weatherDesc[0].value}, ${c.temp_C}°C, humidity ${c.humidity}%, wind ${c.windspeedKmph}km/h`;
+        } catch (e) { return 'Weather failed: ' + e.message; }
+      },
+      search_github: async ({ query, type = 'repositories' }) => {
+        try {
+          const tk = keys.GITHUB_TOKEN;
+          const r = await fetch(`https://api.github.com/search/${type}?q=${encodeURIComponent(query)}&per_page=5`, {
+            headers: { ...(tk ? { Authorization: 'token ' + tk } : {}), Accept: 'application/vnd.github+json' }
+          });
+          const d = await r.json();
+          return JSON.stringify((d.items || []).map(i => ({ name: i.full_name || i.name, stars: i.stargazers_count, url: i.html_url, description: i.description }))).slice(0, 2000);
+        } catch (e) { return 'GitHub search failed: ' + e.message; }
+      },
+
+      // — CODE & BUILD —
       build_app: async ({ description }) => {
         try {
-          const res = await callGroq('Write complete React Native code for: ' + description, 'meta-llama/llama-4-maverick-17b-128e-instruct');
+          const res = await callGroq('Write complete React Native Expo code for: ' + description + '. Return only code, no markdown.', 'meta-llama/llama-4-maverick-17b-128e-instruct');
           return res.choices[0].message.content.slice(0, 4000);
         } catch (e) { return 'Build failed: ' + e.message; }
       },
-      push_github: async ({ token, repo, path, content, message }) => {
+      analyze_code: async ({ code, goal = 'review' }) => {
         try {
-          const tk = token || keys.GITHUB_TOKEN;
-          if (!tk) return 'Error: No GitHub token.';
+          const res = await callGroq(`${goal === 'debug' ? 'Find bugs in' : goal === 'improve' ? 'Improve and optimize' : 'Review'} this code:\n\n${code.slice(0, 3000)}`, 'deepseek-r1-distill-llama-70b');
+          return res.choices[0].message.content.slice(0, 3000);
+        } catch (e) { return 'Analysis failed: ' + e.message; }
+      },
+      execute_code: async ({ code }) => {
+        try {
+          const fn = new Function(code);
+          const result = fn();
+          return String(result ?? 'Done (no return value)');
+        } catch (e) { return 'Execution error: ' + e.message; }
+      },
+      fix_error: async ({ error, context }) => {
+        try {
+          const res = await callGroq(`Diagnose and fix this error: ${error}\nContext: ${context}`, 'deepseek-r1-distill-llama-70b');
+          return res.choices[0].message.content.slice(0, 2000);
+        } catch (e) { return 'Diagnosis failed'; }
+      },
+
+      // — GITHUB —
+      push_github: async ({ repo, path, content, message }) => {
+        try {
+          const tk = keys.GITHUB_TOKEN;
+          if (!tk) return 'Error: No GitHub token in Vault.';
           const shaRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, { headers: { Authorization: 'token ' + tk } });
           const shaJson = await shaRes.json();
           const r = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
@@ -529,17 +596,96 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
             body: JSON.stringify({ message, content: btoa(unescape(encodeURIComponent(content))), ...(shaJson.sha ? { sha: shaJson.sha } : {}) })
           });
           const j = await r.json();
-          return j.commit ? 'Pushed ✅ ' + j.commit.sha.slice(0, 8) : 'Push failed';
+          return j.commit ? '✅ Pushed: ' + j.commit.sha.slice(0, 8) + ' — ' + j.commit.html_url : 'Push failed: ' + JSON.stringify(j).slice(0, 200);
         } catch (e) { return 'Push error: ' + e.message; }
       },
-      read_memory: ({ key }) => agentMemory[key] || 'Not found',
-      save_memory: ({ key, value }) => { setAgentMemory(p => ({ ...p, [key]: value })); return 'Saved'; },
-      fix_error: async ({ error, context }) => {
+      read_github_file: async ({ repo, path }) => {
         try {
-          const res = await callGroq(`Diagnose error: ${error}. Context: ${context}`, 'deepseek-r1-distill-llama-70b');
-          return res.choices[0].message.content;
-        } catch (e) { return 'Diagnosis failed'; }
-      }
+          const tk = keys.GITHUB_TOKEN;
+          const r = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, { headers: { ...(tk ? { Authorization: 'token ' + tk } : {}), Accept: 'application/vnd.github+json' } });
+          const d = await r.json();
+          if (!d.content) return 'File not found or is a directory';
+          return atob(d.content.replace(/\n/g, '')).slice(0, 4000);
+        } catch (e) { return 'Read failed: ' + e.message; }
+      },
+      list_github_files: async ({ repo, dir = '' }) => {
+        try {
+          const tk = keys.GITHUB_TOKEN;
+          const r = await fetch(`https://api.github.com/repos/${repo}/contents/${dir}`, { headers: { ...(tk ? { Authorization: 'token ' + tk } : {}), Accept: 'application/vnd.github+json' } });
+          const d = await r.json();
+          if (!Array.isArray(d)) return 'Not a directory or not found';
+          return d.map(f => `${f.type === 'dir' ? '📁' : '📄'} ${f.name}`).join('\n');
+        } catch (e) { return 'List failed: ' + e.message; }
+      },
+      create_github_issue: async ({ repo, title, body }) => {
+        try {
+          const tk = keys.GITHUB_TOKEN;
+          if (!tk) return 'Error: No GitHub token.';
+          const r = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+            method: 'POST',
+            headers: { Authorization: 'token ' + tk, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, body })
+          });
+          const j = await r.json();
+          return j.html_url ? '✅ Issue created: ' + j.html_url : 'Failed: ' + JSON.stringify(j).slice(0, 200);
+        } catch (e) { return 'Issue error: ' + e.message; }
+      },
+
+      // — AI & MEDIA —
+      generate_image: async ({ prompt }) => 'IMAGE_URL::https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=768&height=768&nologo=true&seed=' + Date.now(),
+      analyze_image: async ({ url }) => {
+        try {
+          const res = await callGroq(JSON.stringify([{ role: 'user', content: [{ type: 'text', text: 'Analyze this image in detail.' }, { type: 'image_url', image_url: { url } }] }]), 'llama-3.2-90b-vision-preview');
+          return res.choices[0].message.content.slice(0, 2000);
+        } catch (e) { return 'Vision failed: ' + e.message; }
+      },
+      summarize_text: async ({ text, lang = 'en' }) => {
+        try {
+          const res = await callGroq(`Summarize concisely in ${lang === 'ar' ? 'Arabic' : 'English'}:\n\n${text.slice(0, 4000)}`, 'meta-llama/llama-4-maverick-17b-128e-instruct');
+          return res.choices[0].message.content.slice(0, 1500);
+        } catch (e) { return 'Summary failed: ' + e.message; }
+      },
+      translate_text: async ({ text, to = 'en' }) => {
+        try {
+          const res = await callGroq(`Translate to ${to}. Return only the translation:\n\n${text.slice(0, 3000)}`, 'meta-llama/llama-4-maverick-17b-128e-instruct');
+          return res.choices[0].message.content.slice(0, 2000);
+        } catch (e) { return 'Translation failed: ' + e.message; }
+      },
+
+      // — PLANNING & REASONING —
+      create_plan: async ({ goal, steps = 5 }) => {
+        try {
+          const res = await callGroq(`Create a detailed ${steps}-step action plan to achieve: ${goal}\nReturn as numbered list with clear actions.`, 'deepseek-r1-distill-llama-70b');
+          return res.choices[0].message.content.slice(0, 2000);
+        } catch (e) { return 'Plan failed: ' + e.message; }
+      },
+      deep_think: async ({ question }) => {
+        try {
+          const res = await callGroq(`Think deeply and reason step by step about: ${question}`, 'deepseek-r1-distill-llama-70b');
+          return res.choices[0].message.content.slice(0, 3000);
+        } catch (e) { return 'Thinking failed: ' + e.message; }
+      },
+
+      // — MEMORY —
+      read_memory: ({ key }) => agentMemory[key] || 'Not found',
+      save_memory: ({ key, value }) => { setAgentMemory(p => ({ ...p, [key]: value })); return '✅ Saved: ' + key; },
+      list_memory: () => {
+        const keys_list = Object.keys(agentMemory);
+        return keys_list.length ? keys_list.map(k => `${k}: ${String(agentMemory[k]).slice(0, 50)}`).join('\n') : 'Memory is empty';
+      },
+
+      // — UTILITIES —
+      calculate: ({ expr }) => { try { return String(eval(expr)); } catch (e) { return 'Calc error: ' + e.message; } },
+      get_datetime: () => {
+        const now = new Date();
+        return `Date: ${now.toLocaleDateString('ar-EG')} | Time: ${now.toLocaleTimeString('ar-EG')} | UTC: ${now.toISOString()}`;
+      },
+      format_json: ({ data }) => {
+        try {
+          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          return JSON.stringify(parsed, null, 2).slice(0, 2000);
+        } catch (e) { return 'Invalid JSON: ' + e.message; }
+      },
     };
 
     const runAgent = async () => {
