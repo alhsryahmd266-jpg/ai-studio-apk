@@ -252,36 +252,56 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
       setKeys(prev => ({ ...prev, [key]: val }));
     };
 
-    const getGroqKey = () => {
+    const getGroqKey = (index) => {
       if (keys.GROQ_OVERRIDE) return keys.GROQ_OVERRIDE;
-      const n = (groqIndex.current % 7) + 1;
-      groqIndex.current++;
+      const n = (index % 7) + 1;
       return process.env['EXPO_PUBLIC_GROQ_KEY_' + n] || '';
     };
 
     const callGroq = async (prompt, model, history = [], system = '') => {
-      const key = getGroqKey();
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + key,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            ...(system ? [{ role: 'system', content: system }] : []),
-            ...history,
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.7,
-        }),
-      });
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error?.message || 'Groq API Error');
+      let lastError;
+      for (let attempt = 0; attempt < 7; attempt++) {
+        const currentIndex = groqIndex.current;
+        groqIndex.current++;
+        const key = getGroqKey(currentIndex);
+        if (!key) continue;
+        try {
+          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + key,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                ...(system ? [{ role: 'system', content: system }] : []),
+                ...history,
+                { role: 'user', content: prompt }
+              ],
+              temperature: 0.7,
+            }),
+          });
+          if (response.status === 429 || response.status === 401) {
+            const err = await response.json();
+            lastError = new Error(err.error?.message || 'Rate limit');
+            continue;
+          }
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error?.message || 'Groq API Error');
+          }
+          return await response.json();
+        } catch (e) {
+          const msg = e.message?.toLowerCase() || '';
+          if (msg.includes('rate') || msg.includes('limit') || msg.includes('quota') || msg.includes('429')) {
+            lastError = e;
+            continue;
+          }
+          throw e;
+        }
       }
-      return await response.json();
+      throw lastError || new Error('All 7 Groq keys exhausted');
     };
 
     // --- TAB: CHAT ---
@@ -321,22 +341,44 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
       setLoading(true);
       setVisionResult('');
       try {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + getGroqKey(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'llama-3.2-90b-vision-preview',
-            messages: [{
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Analyze this image in extreme detail.' },
-                { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + visionImage.base64 } }
-              ]
-            }]
-          })
-        });
-        const data = await res.json();
-        setVisionResult(data.choices[0].message.content);
+        let lastError;
+        let result = null;
+        for (let attempt = 0; attempt < 7; attempt++) {
+          const currentIndex = groqIndex.current;
+          groqIndex.current++;
+          const key = getGroqKey(currentIndex);
+          if (!key) continue;
+          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'llama-3.2-90b-vision-preview',
+              messages: [{
+                role: 'user',
+                content: [
+                  { type: 'text', text: 'Analyze this image in extreme detail.' },
+                  { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + visionImage.base64 } }
+                ]
+              }]
+            })
+          });
+          if (res.status === 429 || res.status === 401) {
+            lastError = new Error('Rate limit on key ' + (currentIndex % 7 + 1));
+            continue;
+          }
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error?.message || 'Vision API Error');
+          }
+          const data = await res.json();
+          result = data.choices[0].message.content;
+          break;
+        }
+        if (result) {
+          setVisionResult(result);
+        } else {
+          throw lastError || new Error('All 7 Groq keys exhausted');
+        }
       } catch (e) {
         Alert.alert('Vision Error', e.message);
       } finally {
