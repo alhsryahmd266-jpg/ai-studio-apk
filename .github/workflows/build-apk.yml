@@ -35,6 +35,18 @@ jobs:
       - name: Install JS dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Patch Compose Compiler version (1.5.15 → 1.5.14 for Kotlin 1.9.24 compatibility)
+        run: |
+          echo "=== Searching for Compose Compiler 1.5.15 in node_modules ==="
+          find node_modules -name "build.gradle" | xargs grep -l "1\.5\.15" 2>/dev/null | while read f; do
+            echo "Patching: $f"
+            grep -n "1\.5\.15\|composeOptions" "$f" || true
+            sed -i 's/1\.5\.15/1.5.14/g' "$f"
+            echo "--- After patch:"
+            grep -n "1\.5\.1[0-9]\|composeOptions" "$f" || true
+          done
+          echo "=== Done patching ==="
+
       - name: Expo Prebuild Android
         run: npx expo prebuild --platform android --no-install --clean
         env:
@@ -47,27 +59,9 @@ jobs:
           EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
           EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
 
-      - name: Fix Kotlin and Gradle
+      - name: Fix Gradle properties
         run: |
           chmod +x android/gradlew
-
-          # ── 1. Gradle init script: suppress Compose/Kotlin compatibility check ──
-          mkdir -p ~/.gradle/init.d
-          cat > ~/.gradle/init.d/suppress-compose-check.gradle << 'INITEOF'
-          allprojects {
-            afterEvaluate { proj ->
-              proj.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { t ->
-                def current = t.kotlinOptions.freeCompilerArgs.toList()
-                def flag = 'plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=true'
-                if (!current.contains(flag)) {
-                  t.kotlinOptions.freeCompilerArgs = current + ['-P', flag]
-                }
-              }
-            }
-          }
-          INITEOF
-
-          # ── 2. gradle.properties tuning ──
           sed -i '/android\.kotlinVersion/d' android/gradle.properties
           sed -i '/kotlin\.version/d' android/gradle.properties
           sed -i '/kotlinVersion/d' android/gradle.properties
@@ -76,12 +70,8 @@ jobs:
           printf 'org.gradle.parallel=false\n' >> android/gradle.properties
           printf 'org.gradle.configureondemand=false\n' >> android/gradle.properties
           printf 'android.suppressUnsupportedCompileSdk=35\n' >> android/gradle.properties
-          printf 'android.kotlinVersion=1.9.25\n' >> android/gradle.properties
-
           echo "=== gradle.properties ==="
           cat android/gradle.properties
-          echo "=== Gradle init script ==="
-          cat ~/.gradle/init.d/suppress-compose-check.gradle
 
       - name: Build Debug APK
         working-directory: android
@@ -98,6 +88,7 @@ jobs:
           else APK=$(find . -name "*.apk" ! -path "*/node_modules/*" 2>/dev/null | sort | tail -1)
           fi
           if [ -z "$APK" ]; then
+            echo "ERROR: APK not found"
             find android/app/build -type f 2>/dev/null | head -20
             exit 1
           fi
@@ -118,11 +109,14 @@ jobs:
           TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
           $TOOLS/zipalign -v -p 4 "$APK_PATH" app-aligned.apk
           $TOOLS/apksigner sign \
-            --ks ai-studio.jks --ks-key-alias ai-studio-key \
-            --ks-pass pass:AiStudio2025! --key-pass pass:AiStudio2025! \
-            --out nebula-studio-pro-signed.apk app-aligned.apk
+            --ks ai-studio.jks \
+            --ks-key-alias ai-studio-key \
+            --ks-pass pass:AiStudio2025! \
+            --key-pass pass:AiStudio2025! \
+            --out nebula-studio-pro-signed.apk \
+            app-aligned.apk
           echo "SIGNED_APK=nebula-studio-pro-signed.apk" >> $GITHUB_ENV
-          du -h nebula-studio-pro-signed.apk
+          echo "APK size: $(du -h nebula-studio-pro-signed.apk | cut -f1)"
 
       - name: Verify RSA-4096 Signature
         run: |
@@ -139,32 +133,34 @@ jobs:
           tag_name: v${{ steps.ver.outputs.VER }}
           name: "🌌 NEBULA STUDIO PRO v${{ steps.ver.outputs.VER }}"
           body: |
-            ## NEBULA STUDIO PRO — AI Agent Mobile App
+            ## 🌌 NEBULA STUDIO PRO — AI Agent Mobile App
 
             ### الميزات / Features
-            - 🤖 **Autonomous Agent** — ReAct Loop, 10 tools, persistent memory
-            - 🧠 **6 AI Models** — Llama 4 Maverick, DeepSeek R1, QwQ 32B, Vision 90B + more
-            - 🔑 **7 Rotating Groq Keys** — zero-downtime auto-failover
-            - 👁️ **Vision Analysis** — 90B parameter multimodal model
-            - 🌐 **Web Search** — Jina AI real-time results
+            - 🤖 **Autonomous Agent** — ReAct Loop · 10 tools · Persistent memory
+            - 🧠 **6 AI Models** — Llama 4 Maverick · DeepSeek R1 · QwQ 32B · Vision 90B
+            - 🔑 **7 Rotating Groq Keys** — Zero-downtime auto-failover
+            - 👁️ **Vision Analysis** — 90B multimodal model
+            - 🌐 **Web Search** — Jina AI real-time
             - 🎨 **AI Image Generation** — Pollinations AI 768×768
-            - 🎬 **Video Storyboard** — AI 4-scene generator
+            - 🎬 **Video Storyboard** — 4-scene AI generator
             - 🔧 **Code Builder** — generates & auto-pushes to GitHub
             - 🔒 **Encrypted Vault** — Android Keystore secured
-            - ✍️ **Self-Improving** — agent pushes code to GitHub autonomously
-            - 🌌 **World-Class Design** — 80-star field, glassmorphism, neon glow
+            - ✍️ **Self-Improving** — Agent pushes code to GitHub autonomously
+            - 🌌 **World-Class Design** — 80-star field · Glassmorphism · Neon glow
 
             ### التوقيع الرقمي / Digital Signature
-            - **Algorithm**: RSA-4096
-            - **Validity**: 10,000 days (~27 years)
-            - **Issued to**: NEBULA STUDIO PRO / Cairo, EG
+            | Property | Value |
+            |---|---|
+            | Algorithm | RSA-4096 |
+            | Validity | 10,000 days (~27 years) |
+            | Issued to | NEBULA STUDIO PRO / Cairo, EG |
           files: nebula-studio-pro-signed.apk
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload artifact
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: nebula-studio-pro-${{ steps.ver.outputs.VER }}
