@@ -1,12 +1,9 @@
-name: 🚀 Build & Release AI Studio APK
+name: Build AI Studio APK
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -49,87 +46,43 @@ jobs:
           EXPO_PUBLIC_GROQ_KEY_6: ${{ secrets.GROQ_KEY_6 }}
           EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
 
-      - name: Fix Kotlin 1.9.24 → 1.9.25 (all sources)
+      - name: Fix Kotlin version (root cause)
         run: |
-          python3 << 'PYEOF'
-          import os, re, glob
+          set -e
 
-          # ── ROOT CAUSE: findProperty('android.kotlinVersion') returns 1.9.24
-          # Fix: set android.kotlinVersion=1.9.25 explicitly in gradle.properties
-          props = 'android/gradle.properties'
-          if os.path.exists(props):
-              with open(props, 'r') as f: c = f.read()
-              # Remove any existing android.kotlinVersion
-              c = re.sub(r'android\.kotlinVersion\s*=.*\n?', '', c)
-              c += '\nandroid.kotlinVersion=1.9.25\n'
-              c += 'kotlin.version=1.9.25\n'
-              c += 'android.suppressUnsupportedCompileSdk=35\n'
-              c += 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\n'
-              c += 'org.gradle.daemon=false\n'
-              c += 'org.gradle.parallel=false\n'
-              with open(props, 'w') as f: f.write(c)
-              print('gradle.properties: android.kotlinVersion=1.9.25 set')
+          echo "=== Step 1: Force android.kotlinVersion=1.9.25 ==="
+          sed -i '/android\.kotlinVersion/d' android/gradle.properties
+          sed -i '/kotlin\.version/d' android/gradle.properties
+          printf '\nandroid.kotlinVersion=1.9.25\nkotlin.version=1.9.25\n' >> android/gradle.properties
+          printf 'android.suppressUnsupportedCompileSdk=35\n' >> android/gradle.properties
+          printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\n' >> android/gradle.properties
+          printf 'org.gradle.daemon=false\n' >> android/gradle.properties
+          printf 'org.gradle.parallel=false\n' >> android/gradle.properties
+          echo "gradle.properties:"
+          grep -E "kotlinVersion|kotlin.version" android/gradle.properties
 
-          # ── PATCH expo-modules-core directly in node_modules
-          # Find its build.gradle and add suppressKotlinVersionCompatibilityCheck
-          suppress_block = '''
-afterEvaluate {
-    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-        kotlinOptions {
-            freeCompilerArgs += ["-P", "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.24"]
-            freeCompilerArgs += ["-P", "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.25"]
-        }
-    }
-}
-'''
-          patched = 0
-          for path in glob.glob('node_modules/**/android/build.gradle', recursive=True):
-              try:
-                  with open(path, 'r') as f: c = f.read()
-                  if ('compose' in c.lower() or 'expo' in c.lower()) and 'suppressKotlinVersionCompatibilityCheck' not in c:
-                      c += suppress_block
-                      with open(path, 'w') as f: f.write(c)
-                      patched += 1
-                      print(f'Patched: {path}')
-              except Exception as e:
-                  print(f'Skip {path}: {e}')
-          print(f'Total patched: {patched} files')
+          echo "=== Step 2: Downgrade Compose Compiler 1.5.15 -> 1.5.14 in expo-modules-core ==="
+          EXPO_CORE="node_modules/expo-modules-core/android/build.gradle"
+          if [ -f "$EXPO_CORE" ]; then
+            grep "kotlinCompilerExtensionVersion" "$EXPO_CORE" | head -3 || echo "no composeOptions found"
+            sed -i 's/kotlinCompilerExtensionVersion "1\.5\.15"/kotlinCompilerExtensionVersion "1.5.14"/g' "$EXPO_CORE"
+            sed -i "s/kotlinCompilerExtensionVersion '1\.5\.15'/kotlinCompilerExtensionVersion '1.5.14'/g" "$EXPO_CORE"
+            grep "kotlinCompilerExtensionVersion" "$EXPO_CORE" | head -3 || echo "no composeOptions after patch"
+            echo "expo-modules-core patched"
+          else
+            echo "expo-modules-core build.gradle not found"
+          fi
 
-          # ── PATCH android/app/build.gradle too
-          app_gradle = 'android/app/build.gradle'
-          if os.path.exists(app_gradle):
-              with open(app_gradle, 'r') as f: c = f.read()
-              if 'suppressKotlinVersionCompatibilityCheck' not in c:
-                  c += suppress_block
-                  with open(app_gradle, 'w') as f: f.write(c)
-                  print('app/build.gradle: suppress added')
+          echo "=== Step 3: Scan all node_modules for Compose Compiler 1.5.15 ==="
+          find node_modules -name "build.gradle" -exec grep -l "kotlinCompilerExtensionVersion.*1\.5\.15" {} \; 2>/dev/null | while read f; do
+            echo "Patching: $f"
+            sed -i 's/kotlinCompilerExtensionVersion "1\.5\.15"/kotlinCompilerExtensionVersion "1.5.14"/g' "$f"
+            sed -i "s/kotlinCompilerExtensionVersion '1\.5\.15'/kotlinCompilerExtensionVersion '1.5.14'/g" "$f"
+          done
+          echo "Done patching"
 
-          # ── PATCH android/build.gradle subprojects block
-          root_gradle = 'android/build.gradle'
-          if os.path.exists(root_gradle):
-              with open(root_gradle, 'r') as f: c = f.read()
-              if 'suppressKotlinVersionCompatibilityCheck' not in c:
-                  global_block = '''
-subprojects {
-    afterEvaluate {
-        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-            kotlinOptions {
-                freeCompilerArgs += ["-P", "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.24"]
-            }
-        }
-    }
-}
-'''
-                  c += global_block
-                  with open(root_gradle, 'w') as f: f.write(c)
-                  print('android/build.gradle: global suppress added')
-
-          PYEOF
-
+          echo "=== Step 4: Make gradlew executable ==="
           chmod +x android/gradlew
-
-          echo "=== android.kotlinVersion in gradle.properties ==="
-          grep "kotlinVersion\|kotlin.version" android/gradle.properties
 
       - name: Build Debug APK
         working-directory: android
@@ -147,14 +100,16 @@ subprojects {
 
       - name: Locate APK
         run: |
-          echo "=== APK files ==="
           find . -name "*.apk" ! -path "*/node_modules/*" 2>/dev/null | sort
           CANONICAL="android/app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "$CANONICAL" ]; then APK="$CANONICAL"
           else APK=$(find . -name "*.apk" ! -path "*/node_modules/*" 2>/dev/null | sort | tail -1)
           fi
-          [ -z "$APK" ] && { find android/app/build -type f 2>/dev/null | head -20; exit 1; }
-          echo "✅ APK: $APK ($(du -h "$APK" | cut -f1))"
+          if [ -z "$APK" ]; then
+            find android/app/build -type f 2>/dev/null | head -20
+            exit 1
+          fi
+          echo "APK found: $APK ($(du -h "$APK" | cut -f1))"
           echo "APK_PATH=$APK" >> $GITHUB_ENV
 
       - name: Generate RSA-4096 Keystore
@@ -165,9 +120,9 @@ subprojects {
             -keyalg RSA -keysize 4096 -validity 10000 \
             -dname "CN=AI Studio, OU=AI, O=AIStudio, L=Cairo, ST=Cairo, C=EG" \
             -storepass AiStudio2025! -keypass AiStudio2025! -noprompt
-          echo "✅ RSA-4096 Keystore ready"
+          echo "RSA-4096 keystore ready"
 
-      - name: Zipalign + Sign (RSA-4096 · v1+v2+v3)
+      - name: Zipalign and Sign APK
         run: |
           TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
           $TOOLS/zipalign -v -p 4 "$APK_PATH" app-aligned.apk
@@ -176,66 +131,30 @@ subprojects {
             --ks-pass pass:AiStudio2025! --key-pass pass:AiStudio2025! \
             --out ai-studio-signed.apk app-aligned.apk
           echo "SIGNED_APK=ai-studio-signed.apk" >> $GITHUB_ENV
-          echo "✅ Signed: $(du -h ai-studio-signed.apk | cut -f1)"
+          echo "Signed APK: $(du -h ai-studio-signed.apk | cut -f1)"
 
       - name: Verify APK Signature
         run: |
           TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
           $TOOLS/apksigner verify --verbose --print-certs ai-studio-signed.apk
 
-      - name: Version Tag
+      - name: Get version tag
         id: ver
         run: echo "VER=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
 
-      - name: Publish GitHub Release
+      - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.VER }}
-          name: "🤖 AI Studio v2 — ${{ steps.ver.outputs.VER }}"
-          body: |
-            ## AI Studio v2 — أقوى مساعد ذكاء اصطناعي على Android 🇪🇬
-
-            ### ✨ الميزات الحصرية (7 تبويبات)
-
-            | الميزة | التفاصيل |
-            |--------|----------|
-            | 🧠 Llama 4 Maverick | أحدث نموذج Meta 2025 — 128 خبير MoE |
-            | 🧠 Llama 4 Scout | سريع ودقيق — 16 خبير MoE |
-            | 🤔 DeepSeek R1 | تفكير عميق chain-of-thought مرئي |
-            | 🧮 QwQ 32B | استدلال رياضي ومنطقي فائق |
-            | 👁️ Vision 90B | أقوى رؤية بصرية في العالم |
-            | **🤖 Autonomous Agent** | **وكيل ذاتي — ReAct Loop كامل** |
-            | 🔧 10 أدوات | search, fetch, calc, image, build, GitHub, memory, fix_error |
-            | 🛠️ Self-Healing | يشخص أخطاءه ويصلحها تلقائياً |
-            | 🌐 تصفح حقيقي | Jina AI Reader + Search |
-            | 🎨 توليد صور | Pollinations AI مجاناً |
-            | 🎬 AI Storyboard | سيناريو فيديو احترافي |
-            | 🔧 App Builder | يكتب تطبيق Android من وصف |
-            | 🔐 Vault مشفر | expo-secure-store — يفتح تلقائياً |
-            | 🔄 Smart Retry | 7 مفاتيح Groq + model fallback |
-            | 💎 Nebula Ultra UI | 3 glows + glassmorphism |
-
-            ### 🔐 التوقيع الأصلي
-            | الخوارزمية | RSA-4096 |
-            |-|-|
-            | الصالحية | 27+ سنة |
-            | المخطط | v1 + v2 + v3 |
-            | التحقق | ✅ apksigner |
-
-            ### 📲 التثبيت
-            1. ⬇️ حمّل `ai-studio-signed.apk`
-            2. ⚙️ الإعدادات → الأمان → مصادر غير معروفة → ✅
-            3. 📦 ثبّت التطبيق
-            4. 🔑 Vault → أضف مفاتيح Groq
-            5. 🤖 Agent tab → اكتب أي مهمة معقدة!
-
+          name: "AI Studio v2 - ${{ steps.ver.outputs.VER }}"
+          body: "AI Studio v2 - Autonomous Agent + 10 tools + Llama 4 Maverick + DeepSeek R1 + Vision 90B + RSA-4096 signed APK"
           files: ai-studio-signed.apk
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Artifact
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ai-studio-v2-${{ steps.ver.outputs.VER }}
