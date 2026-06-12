@@ -1,2702 +1,1010 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Image,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  Dimensions,
-  Animated,
-  StatusBar,
-  Alert,
-  Modal,
-  FlatList,
-  Pressable,
-  Linking,
-  Share,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
-import * as SecureStore from 'expo-secure-store';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5, Feather } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+  import {
+    StyleSheet,
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    ScrollView,
+    Image,
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    Dimensions,
+    Animated,
+    StatusBar,
+    Alert,
+    Modal,
+    FlatList,
+    Pressable,
+    Linking,
+    Share,
+  } from 'react-native';
+  import { LinearGradient } from 'expo-linear-gradient';
+  import * as ImagePicker from 'expo-image-picker';
+  import * as SecureStore from 'expo-secure-store';
+  import { Ionicons, MaterialCommunityIcons, FontAwesome5, Feather } from '@expo/vector-icons';
+  import { BlurView } from 'expo-blur';
 
-const { width, height } = Dimensions.get('window');
+  const { width, height } = Dimensions.get('window');
 
-// --- CONSTANTS ---
-const NEBULA_THEME = {
-  background: '#0a0a0f',
-  card: 'rgba(20, 20, 30, 0.8)',
-  primary: '#8b5cf6', // Purple
-  secondary: '#3b82f6', // Blue
-  accent: '#14b8a6', // Teal
-  text: '#ffffff',
-  textSecondary: '#94a3b8',
-  border: 'rgba(255, 255, 255, 0.1)',
-  error: '#ef4444',
-  success: '#22c55e',
-};
+  /**
+   * NEBULA STUDIO PRO - ULTIMATE AI WORKSPACE
+   * Designed for High-Performance Autonomous Operations
+   */
 
-const MODELS = [
-  { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', name: 'Llama 4 Maverick', icon: 'rocket' },
-  { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'Llama 4 Scout', icon: 'search' },
-  { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1', icon: 'brain' },
-  { id: 'qwen-qwq-32b', name: 'QwQ 32B', icon: 'comment-dots' },
-  { id: 'llama-3.2-90b-vision-preview', name: 'Vision 90B', icon: 'eye' },
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', icon: 'layers' },
-];
-
-const FALLBACK_MODELS = [
-  'meta-llama/llama-4-maverick-17b-128e-instruct',
-  'meta-llama/llama-4-scout-17b-16e-instruct',
-  'deepseek-r1-distill-llama-70b',
-  'qwen-qwq-32b',
-  'llama-3.3-70b-versatile',
-];
-
-// --- HELPER COMPONENTS ---
-
-const AnimatedBackground = () => {
-  const move1 = useRef(new Animated.Value(0)).current;
-  const move2 = useRef(new Animated.Value(0)).current;
-  const move3 = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const createLoop = (val, duration) => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.timing(val, { toValue: 1, duration, useNativeDriver: true }),
-          Animated.timing(val, { toValue: 0, duration, useNativeDriver: true }),
-        ])
-      );
-    };
-    createLoop(move1, 10000).start();
-    createLoop(move2, 15000).start();
-    createLoop(move3, 12000).start();
-  }, []);
-
-  const t1 = move1.interpolate({ inputRange: [0, 1], outputRange: [-100, 100] });
-  const t2 = move2.interpolate({ inputRange: [0, 1], outputRange: [100, -100] });
-  const t3 = move3.interpolate({ inputRange: [0, 1], outputRange: [0, 200] });
-
-  return (
-    <View style={StyleSheet.absoluteFill}>
-      <Animated.View style={[styles.glow, { backgroundColor: NEBULA_THEME.primary, transform: [{ translateX: t1 }, { translateY: t2 }] }]} />
-      <Animated.View style={[styles.glow, { backgroundColor: NEBULA_THEME.secondary, transform: [{ translateX: t2 }, { translateY: t3 }] }]} />
-      <Animated.View style={[styles.glow, { backgroundColor: NEBULA_THEME.accent, transform: [{ translateX: t3 }, { translateY: t1 }] }]} />
-    </View>
-  );
-};
-
-const Shimmer = () => {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(anim, { toValue: 1, duration: 1500, useNativeDriver: true })
-    ).start();
-  }, []);
-
-  const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [-width, width] });
-
-  return (
-    <View style={styles.shimmerContainer}>
-      <Animated.View style={[styles.shimmer, { transform: [{ translateX }] }]}>
-        <LinearGradient
-          colors={['transparent', 'rgba(255,255,255,0.1)', 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
-    </View>
-  );
-};
-
-// --- MAIN APP ---
-
-export default function App() {
-  const [activeTab, setActiveTab] = useState('Chat');
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
-  const [error, setError] = useState(null);
-  const [keys, setKeys] = useState({});
-  const [showVault, setShowVault] = useState(false);
-  // ── AGENT STATE ──────────────────────────────────────────
-  const [agentGoal, setAgentGoal]         = useState('');
-  const [agentSteps, setAgentSteps]       = useState([]);
-  const [agentRunning, setAgentRunning]   = useState(false);
-  const [agentMemory, setAgentMemory]     = useState({});
-  const [agentHistory, setAgentHistory]   = useState([]);
-
-  const [visionImage, setVisionImage] = useState(null);
-  const [searchResults, setSearchResults] = useState([]);
-  const [creationImage, setCreationImage] = useState(null);
-  const [storyboard, setStoryboard] = useState(null);
-  const [buildPrompt, setBuildPrompt] = useState('');
-  const [buildCode, setBuildCode] = useState('');
-  const [lastCommitUrl, setLastCommitUrl] = useState('');
-
-  const scrollRef = useRef();
-  const groqIndex = useRef(0);
-
-  // Initialize keys
-  useEffect(() => {
-    loadKeys();
-  }, []);
-
-  const loadKeys = async () => {
-    const savedKeys = {};
-    try {
-      savedKeys.GITHUB_TOKEN = await SecureStore.getItemAsync('GITHUB_TOKEN');
-      savedKeys.JINA_KEY = await SecureStore.getItemAsync('JINA_KEY');
-      savedKeys.GROQ_OVERRIDE = await SecureStore.getItemAsync('GROQ_OVERRIDE');
-      setKeys(savedKeys);
-      
-      // Auto-open vault if essentials missing
-      if (!savedKeys.GITHUB_TOKEN) setShowVault(true);
-    } catch (e) {
-      console.log('Error loading keys', e);
-    }
+  // --- CONSTANTS ---
+  const THEME = {
+    background: '#050508',
+    card: 'rgba(255, 255, 255, 0.04)',
+    cardBorder: 'rgba(255, 255, 255, 0.08)',
+    primary: '#7c3aed',
+    primaryGlow: '#4f46e5',
+    secondary: '#0ea5e9',
+    secondaryGlow: '#06b6d4',
+    accent: '#14b8a6',
+    text: '#ffffff',
+    textSecondary: '#94a3b8',
+    error: '#ef4444',
+    success: '#22c55e',
   };
 
-  const saveKey = async (key, val) => {
-    await SecureStore.setItemAsync(key, val);
-    setKeys(prev => ({ ...prev, [key]: val }));
-  };
+  const MODELS = [
+    { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', name: 'Llama 4 Maverick', icon: 'rocket' },
+    { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'Llama 4 Scout', icon: 'search' },
+    { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1', icon: 'brain' },
+    { id: 'qwen-qwq-32b', name: 'QwQ 32B', icon: 'comment-dots' },
+    { id: 'llama-3.2-90b-vision-preview', name: 'Vision 90B', icon: 'eye' },
+    { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', icon: 'layers' },
+  ];
 
-  // Rotation logic
-  const getGroqKey = () => {
-    if (keys.GROQ_OVERRIDE) return keys.GROQ_OVERRIDE;
-    const keyNum = (groqIndex.current % 7) + 1;
-    groqIndex.current++;
-    const envKey = process.env['EXPO_PUBLIC_GROQ_KEY_' + String(keyNum)] || '';  return envKey;
-  };
+  const FALLBACK_MODELS = [
+    'meta-llama/llama-4-maverick-17b-128e-instruct',
+    'meta-llama/llama-4-scout-17b-16e-instruct',
+    'deepseek-r1-distill-llama-70b',
+    'qwen-qwq-32b',
+    'llama-3.3-70b-versatile',
+  ];
 
-  // --- API CALLS ---
+  // --- ANIMATED BACKGROUND COMPONENTS ---
 
-  const callGroq = async (prompt, model, history = [], system = '') => {
-    const key = getGroqKey();
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + key,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: [
-          ...(system ? [{ role: 'system', content: system }] : []),
-          ...history,
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7,
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || 'API Error');
-    }
-    return await response.json();
-  };
-
-  const handleRetry = async (prompt, history, originalModel) => {
-    let lastErr = null;
-    for (const model of FALLBACK_MODELS) {
-      if (model === originalModel) continue;
-      try {
-        return await callGroq(prompt, model, history);
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-    throw lastErr;
-  };
-
-  
-  // ════════════════════════════════════════════════════════
-  //  AUTONOMOUS AGENT — ReAct Loop (Reason + Act + Observe)
-  //  Same engine as Replit Agent. Thinks, uses tools, fixes.
-  // ════════════════════════════════════════════════════════
-
-  const AGENT_SYSTEM = `You are an autonomous AI agent with full tool access.
-You operate in a ReAct loop: Think → Act → Observe → Repeat.
-
-TOOLS (call with exact syntax):
-  [TOOL: search_web    | {"query":"..."}]
-  [TOOL: fetch_url     | {"url":"https://..."}]
-  [TOOL: calculate     | {"expr":"2+2"}]
-  [TOOL: get_datetime  | {}]
-  [TOOL: generate_image| {"prompt":"..."}]
-  [TOOL: build_app     | {"description":"..."}]
-  [TOOL: push_github   | {"token":"...","repo":"owner/repo","path":"App.tsx","content":"...","message":"..."}]
-  [TOOL: read_memory   | {"key":"..."}]
-  [TOOL: save_memory   | {"key":"...","value":"..."}]
-  [TOOL: fix_error     | {"error":"...","context":"..."}]
-
-RULES:
-1. Start with THOUGHT: analyse the goal.
-2. Use exactly one tool per step.
-3. After OBSERVATION, decide next step.
-4. Write FINAL ANSWER: when done.
-5. If something fails, call fix_error to diagnose and retry.
-6. You have up to 10 iterations — be efficient.`;
-
-  const agentTools = {
-    search_web: async ({ query }) => {
-      try {
-        const r = await fetch('https://s.jina.ai/' + encodeURIComponent(query),
-          { headers: { Accept: 'application/json', 'X-Return-Format': 'text' } });
-        const t = await r.text();
-        return t.slice(0, 3000);
-      } catch (e) { return 'Search failed: ' + e.message; }
-    },
-    fetch_url: async ({ url }) => {
-      try {
-        const r = await fetch('https://r.jina.ai/' + url,
-          { headers: { Accept: 'text/plain' } });
-        const t = await r.text();
-        return t.slice(0, 3000);
-      } catch (e) { return 'Fetch failed: ' + e.message; }
-    },
-    calculate: ({ expr }) => {
-      try { return String(eval(expr)); } catch (e) { return 'Calc error: ' + e.message; }
-    },
-    get_datetime: () => new Date().toLocaleString('ar-EG'),
-    generate_image: async ({ prompt }) => {
-      const url = 'https://image.pollinations.ai/prompt/' +
-        encodeURIComponent(prompt) + '?width=768&height=768&nologo=true&seed=' + Date.now();
-      return 'IMAGE_URL::' + url;
-    },
-    build_app: async ({ description }) => {
-      try {
-        const res = await callGroq(
-          'Write complete React Native Expo App.tsx code for: ' + description +
-          '\nReturn only valid TypeScript code. No markdown.',
-          'meta-llama/llama-4-maverick-17b-128e-instruct', [], ''
-        );
-        return (res.choices?.[0]?.message?.content || '').slice(0, 4000);
-      } catch (e) { return 'Build failed: ' + e.message; }
-    },
-    push_github: async ({ token, repo, path: filePath, content, message }) => {
-      try {
-        const tk = token || keys.GITHUB_TOKEN;
-        if (!tk) return 'Error: no GitHub token. Add in Vault first.';
-        const shaRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`,
-          { headers: { Authorization: 'token ' + tk } });
-        const shaJson = await shaRes.json();
-        const sha = shaJson.sha;
-        const body = { message, content: btoa(unescape(encodeURIComponent(content))),
-          ...(sha ? { sha } : {}) };
-        const r = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
-          method: 'PUT',
-          headers: { Authorization: 'token ' + tk, 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const j = await r.json();
-        return j.commit?.sha ? 'Pushed ✅ commit: ' + j.commit.sha.slice(0,8) : 'Push failed: ' + JSON.stringify(j).slice(0,200);
-      } catch (e) { return 'Push error: ' + e.message; }
-    },
-    read_memory: ({ key }) => {
-      const v = agentMemory[key];
-      return v !== undefined ? String(v) : 'No memory for key: ' + key;
-    },
-    save_memory: ({ key, value }) => {
-      setAgentMemory(prev => ({ ...prev, [key]: value }));
-      return 'Saved ✅';
-    },
-    fix_error: async ({ error, context }) => {
-      try {
-        const res = await callGroq(
-          `Error encountered: ${error}\nContext: ${context}\n\nDiagnose the root cause and suggest a concrete fix in 3 steps.`,
-          'deepseek-r1-distill-llama-70b', [], ''
-        );
-        return res.choices?.[0]?.message?.content || 'Could not diagnose';
-      } catch (e) { return 'Diagnosis failed: ' + e.message; }
-    },
-  };
-
-  const parseToolCall = (text) => {
-    const match = text.match(/\[TOOL:\s*(\w+)\s*\|\s*(\{[^\]]*\})\]/s);
-    if (!match) return null;
-    try {
-      return { name: match[1].trim(), args: JSON.parse(match[2]) };
-    } catch { return { name: match[1].trim(), args: {} }; }
-  };
-
-  const addStep = (step) => setAgentSteps(prev => [...prev, step]);
-
-  const runAgent = async () => {
-    if (!agentGoal.trim() || agentRunning) return;
-    setAgentRunning(true);
-    setAgentSteps([]);
-
-    const startStep = {
-      id: Date.now(), type: 'goal',
-      text: '🎯 الهدف: ' + agentGoal,
-      ts: new Date().toLocaleTimeString(),
-    };
-    setAgentSteps([startStep]);
-
-    const history = [];
-    const MAX_ITER = 10;
-    let iteration = 0;
-
-    try {
-      while (iteration < MAX_ITER) {
-        iteration++;
-
-        // ── Think ────────────────────────────────────────────
-        const thinkStep = {
-          id: Date.now() + iteration, type: 'thinking',
-          text: '🧠 التفكير — خطوة ' + iteration + '/' + MAX_ITER + '…',
-          ts: new Date().toLocaleTimeString(),
-        };
-        setAgentSteps(prev => [...prev, thinkStep]);
-
-        let prompt = iteration === 1
-          ? 'GOAL: ' + agentGoal + '\n\nStart by thinking about what steps are needed, then call the first tool.'
-          : 'Continue working on the goal. History so far:\n' +
-            history.slice(-4).map(h => h.role + ': ' + (typeof h.content==='string'?h.content.slice(0,500):'')).join('\n') +
-            '\n\nWhat is your next step?';
-
-        let llmResp;
-        try {
-          llmResp = await callGroq(prompt, selectedModel, history, AGENT_SYSTEM);
-        } catch (e) {
-          llmResp = await callGroq(prompt, 'meta-llama/llama-4-scout-17b-16e-instruct', history, AGENT_SYSTEM);
-        }
-
-        const rawText = llmResp.choices?.[0]?.message?.content || '';
-        history.push({ role: 'assistant', content: rawText });
-
-        // ── Parse thinking block ─────────────────────────────
-        const thinkMatch = rawText.match(/<think>([\s\S]*?)<\/think>/i);
-        if (thinkMatch) {
-          setAgentSteps(prev => [...prev, {
-            id: Date.now() + 100 + iteration, type: 'thought',
-            text: '💭 ' + thinkMatch[1].trim().slice(0, 500),
-            ts: new Date().toLocaleTimeString(),
-          }]);
-        }
-
-        // ── Check for FINAL ANSWER ───────────────────────────
-        if (/FINAL ANSWER:/i.test(rawText)) {
-          const answer = rawText.replace(/<think>[\s\S]*?<\/think>/gi, '')
-            .split(/FINAL ANSWER:/i)[1]?.trim() || rawText;
-          setAgentSteps(prev => [...prev, {
-            id: Date.now() + 200, type: 'done',
-            text: '✅ الإجابة النهائية:\n' + answer,
-            ts: new Date().toLocaleTimeString(),
-          }]);
-          setAgentHistory(prev => [...prev, { goal: agentGoal, answer, ts: new Date().toISOString() }]);
-          break;
-        }
-
-        // ── Parse tool call ──────────────────────────────────
-        const tool = parseToolCall(rawText);
-        if (!tool) {
-          // No tool call and no final answer — try one more iteration
-          if (iteration >= MAX_ITER - 1) {
-            setAgentSteps(prev => [...prev, {
-              id: Date.now() + 300, type: 'done',
-              text: '⚠️ انتهت التكرارات. آخر رد:\n' + rawText.replace(/<think>[\s\S]*?<\/think>/gi,'').trim().slice(0,800),
-              ts: new Date().toLocaleTimeString(),
-            }]);
-          }
-          continue;
-        }
-
-        // ── Show tool call ───────────────────────────────────
-        setAgentSteps(prev => [...prev, {
-          id: Date.now() + 400 + iteration, type: 'tool_call',
-          text: '🔧 أداة: ' + tool.name + '\n' + JSON.stringify(tool.args, null, 2).slice(0, 200),
-          ts: new Date().toLocaleTimeString(),
-        }]);
-
-        // ── Execute tool ─────────────────────────────────────
-        let observation = '';
-        try {
-          const fn = agentTools[tool.name];
-          if (fn) {
-            const result = await fn(tool.args);
-            observation = typeof result === 'string' ? result : JSON.stringify(result);
-          } else {
-            observation = 'Unknown tool: ' + tool.name;
-          }
-        } catch (e) {
-          observation = 'Tool error: ' + e.message;
-          // Auto-fix on error
-          try {
-            const fix = await agentTools.fix_error({ error: e.message, context: tool.name + ' ' + JSON.stringify(tool.args) });
-            observation += '\n\nDiagnosis: ' + fix;
-          } catch {}
-        }
-
-        // ── Show observation ─────────────────────────────────
-        const isImage = observation.startsWith('IMAGE_URL::');
-        setAgentSteps(prev => [...prev, {
-          id: Date.now() + 500 + iteration, type: isImage ? 'image' : 'observation',
-          text: isImage ? observation.replace('IMAGE_URL::', '') : '👁️ النتيجة:\n' + observation.slice(0, 600),
-          ts: new Date().toLocaleTimeString(),
-          imageUrl: isImage ? observation.replace('IMAGE_URL::', '') : null,
-        }]);
-
-        history.push({ role: 'user', content: 'OBSERVATION: ' + observation.slice(0, 2000) });
-      }
-    } catch (e) {
-      setAgentSteps(prev => [...prev, {
-        id: Date.now() + 999, type: 'error',
-        text: '❌ خطأ في الوكيل: ' + e.message,
-        ts: new Date().toLocaleTimeString(),
-      }]);
-    } finally {
-      setAgentRunning(false);
-    }
-  };
-
-  // Auto-invoke agent on app errors (self-healing)
-  const invokeAgentForFix = useCallback(async (errMsg, context) => {
-    setAgentGoal('أصلح هذا الخطأ تلقائياً: ' + errMsg + ' | السياق: ' + context);
-    setActiveTab('Agent');
-    setTimeout(() => runAgent(), 300);
-  }, [keys, selectedModel]);
-
-  // --- TOOL ENGINE ---
-
-  const tools = {
-    search_web: async ({ query }) => {
-      const resp = await fetch('https://s.jina.ai/' + encodeURIComponent(query), {
-        headers: { 'Accept': 'application/json' }
-      });
-      return await resp.json();
-    },
-    fetch_url: async ({ url }) => {
-      const resp = await fetch('https://r.jina.ai/' + url, {
-        headers: { 'Accept': 'application/json' }
-      });
-      return await resp.text();
-    },
-    calculate: ({ expr }) => {
-      try { return eval(expr).toString(); } catch (e) { return 'Error calculating'; }
-    },
-    get_datetime: () => new Date().toLocaleString(),
-    generate_image: async ({ prompt }) => {
-      return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=1024&height=1024&nologo=true';
-    }
-  };
-
-  const runAgent = async (prompt) => {
-    setLoading(true);
-    setError(null);
-    let currentHistory = [...messages.map(m => ({ role: m.role, content: m.content }))];
-    let aiMessage = { role: 'assistant', content: '', id: Date.now().toString() };
+  const StarField = () => {
+    const stars = useMemo(() => [{"id":0,"size":1.907324325055817,"x":35.050717289395884,"y":29.805187966272584,"opacity":0.8580796832933582,"duration":4775.178464854356},{"id":1,"size":1.781199041026265,"x":21.68118621600188,"y":23.03240813926173,"opacity":0.413401305507771,"duration":4465.423139653571},{"id":2,"size":2.280704342728921,"x":86.00350234857679,"y":70.4753374535071,"opacity":0.9001783478418826,"duration":4732.210227565976},{"id":3,"size":1.5176597685598323,"x":48.38410395786064,"y":87.22659232214507,"opacity":0.3445357077712048,"duration":3219.26164122531},{"id":4,"size":2.418606472981928,"x":54.14596009118113,"y":4.9829507145225715,"opacity":0.912369602350072,"duration":2968.2429456311},{"id":5,"size":2.426682528055883,"x":26.6644314049018,"y":50.50814689934147,"opacity":0.5300514575210462,"duration":4763.457505148049},{"id":6,"size":2.239409716181638,"x":16.837851630177237,"y":10.411115693839745,"opacity":0.4531374367031348,"duration":4052.4891207648543},{"id":7,"size":1.212096106267746,"x":13.09160690349611,"y":71.42217813259353,"opacity":0.7973651164596045,"duration":3362.6796484224287},{"id":8,"size":1.2041165489229657,"x":1.480191090823757,"y":72.4555924807652,"opacity":0.9380244766930459,"duration":2728.42732538235},{"id":9,"size":1.1239959827012522,"x":47.7651512106398,"y":29.374185142449626,"opacity":0.9594848290727438,"duration":4666.641562071949},{"id":10,"size":1.8517433401669257,"x":77.96995980068237,"y":10.069497830585616,"opacity":0.9691223880436579,"duration":4289.724652752154},{"id":11,"size":2.7512528523802255,"x":82.1433060343676,"y":72.87296694384817,"opacity":0.6237210373631509,"duration":4975.653836048688},{"id":12,"size":1.1748854200612668,"x":30.469544490634213,"y":79.64103908807476,"opacity":0.7234103185393195,"duration":2725.125345659026},{"id":13,"size":2.626237980150955,"x":7.820808598817353,"y":82.82370642607131,"opacity":0.5233007190563294,"duration":3484.4235112323827},{"id":14,"size":1.3127570217832165,"x":0.8487383165203477,"y":28.848473913673047,"opacity":0.9384711080115757,"duration":2366.3932381693776},{"id":15,"size":2.171188209051307,"x":71.05166014783512,"y":24.31566855857501,"opacity":0.30039090905236404,"duration":3347.537982603584},{"id":16,"size":1.852615624649058,"x":97.81763431203998,"y":25.276599451592396,"opacity":0.7251992453602081,"duration":3409.769644227248},{"id":17,"size":1.0747985638379753,"x":29.50402769964031,"y":64.42012670436515,"opacity":0.6052331629027448,"duration":4502.1173192001515},{"id":18,"size":2.9755159085569085,"x":58.15827537966054,"y":34.63385331392577,"opacity":0.5624221091121315,"duration":4622.981850772603},{"id":19,"size":1.7607531261575025,"x":76.3207851826307,"y":69.58208159208834,"opacity":0.5049255208041308,"duration":2650.9119784821924},{"id":20,"size":1.0779076707623814,"x":59.003647114011734,"y":16.16185566742525,"opacity":0.9130067179631634,"duration":2084.1705105766573},{"id":21,"size":2.14751898299571,"x":91.54722092561462,"y":97.76994599801259,"opacity":0.4669786361612743,"duration":2452.07269738759},{"id":22,"size":2.1859475488873454,"x":50.53048357467289,"y":96.91287260004377,"opacity":0.5816184467664702,"duration":3019.0859251772963},{"id":23,"size":2.954997966265841,"x":10.1660336740943,"y":96.31571875256581,"opacity":0.8705910998219344,"duration":2897.2237408292685},{"id":24,"size":2.6343594315058882,"x":27.211676167582578,"y":43.84817950701512,"opacity":0.9740517895641896,"duration":4439.108731524862},{"id":25,"size":2.7956747445031707,"x":68.89166262249296,"y":94.57538908331682,"opacity":0.8259870476451627,"duration":4596.507049840906},{"id":26,"size":2.5662149989087144,"x":24.032427763059783,"y":79.76848156126228,"opacity":0.6481890071330672,"duration":4135.355241593276},{"id":27,"size":1.0622331635926523,"x":73.3006362990376,"y":82.85595664295566,"opacity":0.8259048677760681,"duration":3081.6799216268937},{"id":28,"size":2.6167767820147025,"x":57.72185332533819,"y":86.66611318107947,"opacity":0.6346384338711816,"duration":3586.986945216471},{"id":29,"size":1.0965490204626662,"x":32.32891382442882,"y":64.48639610558115,"opacity":0.6830965922486356,"duration":2645.984691657793},{"id":30,"size":2.886735985541546,"x":35.99092488806328,"y":38.16162105983734,"opacity":0.3791528572153776,"duration":3294.5871621827364},{"id":31,"size":1.2055138133156889,"x":45.967328623358775,"y":86.84099548032289,"opacity":0.5546617001344207,"duration":4867.715764465056},{"id":32,"size":2.9925301881721302,"x":27.015248620180344,"y":43.02069935981378,"opacity":0.5892124155369096,"duration":4690.361458516584},{"id":33,"size":2.4674888174116805,"x":13.972920062973305,"y":41.32710629483785,"opacity":0.34225858330818515,"duration":4244.658773578241},{"id":34,"size":2.0095341669193236,"x":55.39800763991123,"y":66.47084535863577,"opacity":0.9197183537022475,"duration":3702.965563878359},{"id":35,"size":1.3561519071383734,"x":95.81691905731402,"y":5.478117253784287,"opacity":0.7553313799441508,"duration":4091.590919025878},{"id":36,"size":2.064509776185302,"x":68.1977698892873,"y":55.810769285012896,"opacity":0.9863477230202582,"duration":4317.9191427761325},{"id":37,"size":2.192005312397168,"x":0.9174629582930249,"y":12.38482620068282,"opacity":0.7035459148373223,"duration":4419.797870835764},{"id":38,"size":2.6935352135250286,"x":74.84234166917054,"y":51.99609856380511,"opacity":0.43263296215613645,"duration":2451.066938989616},{"id":39,"size":1.081611183060779,"x":21.795047622439622,"y":68.31665725289466,"opacity":0.7245384224220099,"duration":2115.4509435684968},{"id":40,"size":1.5654387129200487,"x":66.45686531470632,"y":85.48496033008426,"opacity":0.8861204452211682,"duration":4423.066768265629},{"id":41,"size":2.8448610200816424,"x":83.31605157195894,"y":15.050519998835,"opacity":0.3374184960825646,"duration":3967.383700596854},{"id":42,"size":1.3144453786770343,"x":37.86189477849868,"y":72.13210987298402,"opacity":0.8616203376987019,"duration":3883.772909805217},{"id":43,"size":1.773885502326228,"x":3.3000921721096255,"y":6.768554178406383,"opacity":0.987214901350786,"duration":2165.4972640678043},{"id":44,"size":1.1138679942780718,"x":67.48385039651987,"y":65.62992382430772,"opacity":0.8153611546870203,"duration":4770.692933460292},{"id":45,"size":1.1803427403881446,"x":54.1092806493439,"y":83.43729116191842,"opacity":0.9105584920553109,"duration":3254.094856569296},{"id":46,"size":1.2045661642961054,"x":72.04920991083881,"y":23.36964130204604,"opacity":0.6813192277144677,"duration":3525.4009476177225},{"id":47,"size":1.9114884119097155,"x":54.438787599105765,"y":74.11500524228482,"opacity":0.7532755258510221,"duration":3947.910216987625},{"id":48,"size":1.1244767702525342,"x":73.97224978634513,"y":64.14964304020405,"opacity":0.6004784606224924,"duration":2279.8795228199297},{"id":49,"size":1.6945593682131355,"x":21.53604590069349,"y":16.87348210044619,"opacity":0.7319680398980667,"duration":4914.350380847587},{"id":50,"size":2.408109859993184,"x":14.787702697395488,"y":81.40975542179308,"opacity":0.499744119179647,"duration":4342.2609698924625},{"id":51,"size":2.7497597496676778,"x":55.30170899397935,"y":10.756925208833955,"opacity":0.8004016507287777,"duration":2037.6373600380591},{"id":52,"size":1.6186389877436644,"x":66.64265275530245,"y":97.82852082388938,"opacity":0.322911768211342,"duration":2903.90184410095},{"id":53,"size":1.2647801382969943,"x":64.79949695723255,"y":10.148365701792471,"opacity":0.8318832929371129,"duration":2696.9530135829173},{"id":54,"size":2.7973337470982917,"x":45.40061547012482,"y":86.47737872510031,"opacity":0.6739127746464231,"duration":2605.3443194437205},{"id":55,"size":1.1945926285736488,"x":74.12838444784668,"y":40.143725457968536,"opacity":0.6448650898347119,"duration":2627.6988423827747},{"id":56,"size":2.0507123004156718,"x":45.44162488185861,"y":30.39539753930738,"opacity":0.8576776460208495,"duration":3555.3751027032736},{"id":57,"size":2.9050855008649576,"x":19.16010707729503,"y":7.606563795067123,"opacity":0.3890498528376003,"duration":3441.2350483414284},{"id":58,"size":1.4870487192926225,"x":31.798828663217304,"y":38.48924700729799,"opacity":0.6638306498601386,"duration":2111.6571175033687},{"id":59,"size":1.1934594104930603,"x":7.374561002619595,"y":39.18037928797054,"opacity":0.5658049064307406,"duration":4489.6170436986995},{"id":60,"size":1.701442938819394,"x":37.017712903941245,"y":48.04355492649184,"opacity":0.4406769590032255,"duration":4411.132207257213},{"id":61,"size":1.716118858447996,"x":25.540779133024415,"y":79.98747630321436,"opacity":0.6316465222526297,"duration":2929.712288332512},{"id":62,"size":1.566388486313826,"x":38.8401316604261,"y":91.1380262232428,"opacity":0.905194954755816,"duration":3137.5346180316446},{"id":63,"size":2.987843098308939,"x":71.94854204136327,"y":66.32493657725725,"opacity":0.8389764406853559,"duration":3986.4353313988013},{"id":64,"size":1.7271616920379547,"x":5.55115913294788,"y":62.23872659926399,"opacity":0.46657170945451676,"duration":4987.562905958079},{"id":65,"size":1.3662776769812557,"x":96.3623899329883,"y":90.77377543795669,"opacity":0.4699333059916203,"duration":4991.591510894736},{"id":66,"size":2.7824862350429216,"x":5.812657880913519,"y":12.986109217859054,"opacity":0.8380587867320148,"duration":2502.94237454292},{"id":67,"size":2.047237731661845,"x":67.23562483654113,"y":17.988217067750135,"opacity":0.42332072003239896,"duration":3334.9398788959415},{"id":68,"size":1.0605533972395649,"x":98.96081143466256,"y":81.21656428496118,"opacity":0.3759707109156236,"duration":4372.381371901996},{"id":69,"size":2.6897192093938225,"x":90.28509804502029,"y":49.71564114898608,"opacity":0.6616846891541928,"duration":4463.697371868348},{"id":70,"size":1.1874621524742661,"x":11.571214737641,"y":26.459613901734656,"opacity":0.7745779474135874,"duration":4451.185433797581},{"id":71,"size":2.8121146218281976,"x":1.8067979475123286,"y":24.210177299634417,"opacity":0.6434314475089306,"duration":3099.2315230161535},{"id":72,"size":2.4397810922189893,"x":47.39967122732256,"y":52.758267804652846,"opacity":0.49601497751504586,"duration":3604.949575376519},{"id":73,"size":2.1759820821357727,"x":77.8077465136722,"y":63.49005639758476,"opacity":0.6509412408406043,"duration":2663.34309437927},{"id":74,"size":2.966060462776777,"x":51.00618906692973,"y":32.904829691695795,"opacity":0.531031698908278,"duration":3036.57913609565},{"id":75,"size":1.4340050774801485,"x":58.13214756351268,"y":84.99440526534198,"opacity":0.6767273112936597,"duration":4716.638463794768},{"id":76,"size":2.915138866013491,"x":12.330294278645937,"y":96.13305463758073,"opacity":0.5306255005807183,"duration":3164.4337490317566},{"id":77,"size":1.4291172045338296,"x":24.945717045266846,"y":59.543091867648016,"opacity":0.6029218019148368,"duration":2223.967992321765},{"id":78,"size":1.8262677379820302,"x":98.34780102147076,"y":58.18086895000085,"opacity":0.5043285373074573,"duration":2609.8545486021003},{"id":79,"size":2.5250319815519857,"x":0.7396693738903837,"y":73.42625228489015,"opacity":0.8180556679092044,"duration":3102.5693462171757}], []);
     
-    setMessages(prev => [...prev, { role: 'user', content: prompt, id: 'u' + Date.now() }, aiMessage]);
-
-    try {
-      let currentIteration = 0;
-      let finalContent = '';
-      
-      while (currentIteration < 5) {
-        const result = await callGroq(prompt, selectedModel, currentHistory, "You are an agent with tools. Use [TOOL: name | {\"key\":\"val\"}] to call tools.");
-        const text = result.choices[0].message.content;
-        finalContent += text;
-        
-        const toolMatch = text.match(/\[TOOL: (\w+) \| (\{.*?\})\]/);
-        if (toolMatch) {
-          const [full, name, argsStr] = toolMatch;
-          const args = JSON.parse(argsStr);
-          const toolResult = await tools[name](args);
-          const toolOutput = '\n[TOOL_RESULT: ' + JSON.stringify(toolResult) + ']';
-          finalContent += toolOutput;
-          currentHistory.push({ role: 'assistant', content: text });
-          currentHistory.push({ role: 'user', content: toolOutput });
-          currentIteration++;
-        } else {
-          break;
-        }
-      }
-      
-      setMessages(prev => prev.map(m => m.id === aiMessage.id ? { ...m, content: finalContent } : m));
-    } catch (e) {
-      try {
-        const fallbackRes = await handleRetry(prompt, currentHistory, selectedModel);
-        setMessages(prev => prev.map(m => m.id === aiMessage.id ? { ...m, content: fallbackRes.choices[0].message.content } : m));
-      } catch (retryErr) {
-        setError(retryErr.message);
-      }
-    } finally {
-      setLoading(false);
-    }
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        {stars.map((star) => (
+          <Star key={star.id} {...star} />
+        ))}
+      </View>
+    );
   };
 
-  // --- VISION ---
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.5,
-      base64: true,
+  const Star = ({ size, x, y, opacity, duration }) => {
+    const anim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, { toValue: 1, duration, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0, duration, useNativeDriver: true }),
+        ])
+      ).start();
+    }, []);
+
+    const alpha = anim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [opacity * 0.3, opacity],
     });
 
-    if (!result.canceled) {
-      setVisionImage(result.assets[0]);
-    }
+    return (
+      <Animated.View
+        style={[
+          styles.star,
+          {
+            width: size,
+            height: size,
+            left: `${x}%`,
+            top: `${y}%`,
+            opacity: alpha,
+          },
+        ]}
+      />
+    );
   };
 
-  const analyzeImage = async () => {
-    if (!visionImage) return;
-    setLoading(true);
-    try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + getGroqKey(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'llama-3.2-90b-vision-preview',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Describe this image in detail.' },
-              { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + visionImage.base64 } }
-            ]
-          }]
-        })
-      });
-      const data = await res.json();
-      Alert.alert('Analysis', data.choices[0].message.content);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const NebulaOrbs = () => {
+    const orb1 = useRef(new Animated.Value(0)).current;
+    const orb2 = useRef(new Animated.Value(0)).current;
+    const orb3 = useRef(new Animated.Value(0)).current;
 
-  // --- SEARCH ---
-  const doSearch = async (query) => {
-    setLoading(true);
-    try {
-      const resp = await fetch('https://s.jina.ai/' + encodeURIComponent(query), {
-        headers: { 'Accept': 'application/json' }
-      });
-      const data = await resp.json();
-      setSearchResults(data.data || []);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    useEffect(() => {
+      const animate = (val, duration) => {
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(val, { toValue: 1, duration, useNativeDriver: true }),
+            Animated.timing(val, { toValue: 0, duration, useNativeDriver: true }),
+          ])
+        ).start();
+      };
+      animate(orb1, 8000);
+      animate(orb2, 12000);
+      animate(orb3, 10000);
+    }, []);
 
-  // --- CREATE ---
-  const generateImg = (p) => {
-    const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(p) + '?width=768&height=768&nologo=true';
-    setCreationImage(url);
-  };
+    const t1 = orb1.interpolate({ inputRange: [0, 1], outputRange: [-50, 50] });
+    const r1 = orb1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.2] });
 
-  const makeStoryboard = async (p) => {
-    setLoading(true);
-    try {
-      const res = await callGroq('Generate a JSON array of 4 scenes for: ' + p + '. Each scene: {"title", "description", "visual"}', 'deepseek-r1-distill-llama-70b');
-      const text = res.choices[0].message.content;
-      const jsonStr = text.match(/\[[\s\S]*\]/)[0];
-      setStoryboard(JSON.parse(jsonStr));
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const t2 = orb2.interpolate({ inputRange: [0, 1], outputRange: [50, -50] });
+    const r2 = orb2.interpolate({ inputRange: [0, 1], outputRange: [1.2, 0.9] });
 
-  // --- BUILD ---
-  const pushToGithub = async () => {
-    if (!keys.GITHUB_TOKEN) return setShowVault(true);
-    setLoading(true);
-    try {
-      // 1. Get code from AI
-      const aiRes = await callGroq('Write a complete, single-file App.tsx for: ' + buildPrompt + '. Return ONLY code.', 'meta-llama/llama-4-maverick-17b-128e-instruct');
-      const code = aiRes.choices[0].message.content.replace(//g, '');
-      setBuildCode(code);
-
-      // 2. Get current SHA
-      const getFile = await fetch('https://api.github.com/repos/alhsryahmd266-jpg/ai-studio-apk/contents/App.tsx', {
-        headers: { 'Authorization': 'token ' + keys.GITHUB_TOKEN }
-      });
-      const fileData = await getFile.json();
-
-      // 3. Push
-      const push = await fetch('https://api.github.com/repos/alhsryahmd266-jpg/ai-studio-apk/contents/App.tsx', {
-        method: 'PUT',
-        headers: {
-          'Authorization': 'token ' + keys.GITHUB_TOKEN,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: 'Build: ' + buildPrompt.substring(0, 50),
-          content: btoa(unescape(encodeURIComponent(code))),
-          sha: fileData.sha,
-        })
-      });
-      const pushData = await push.json();
-      setLastCommitUrl(pushData.commit.html_url);
-      Alert.alert('Success', 'Pushed to GitHub!');
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // --- RENDER HELPERS ---
-
-  const renderMessage = ({ item }) => {
-    const isUser = item.role === 'user';
-    const thinkMatch = item.content.match(/<think>([\s\S]*?)<\/think>/);
-    const mainContent = item.content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+    const t3 = orb3.interpolate({ inputRange: [0, 1], outputRange: [0, 100] });
+    const r3 = orb3.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.1] });
 
     return (
-      <View style={[styles.messageRow, isUser ? { justifyContent: 'flex-end' } : {}]}>
-        {!isUser && <View style={styles.aiAvatar}><Ionicons name="sparkles" size={14} color="#fff" /></View>}
-        <View style={[styles.bubble, isUser ? styles.userBubble : styles.aiBubble]}>
-          {thinkMatch && (
-            <View style={styles.thinkContainer}>
-              <Text style={styles.thinkTitle}>🧠 Thinking...</Text>
-              <Text style={styles.thinkText}>{thinkMatch[1].trim()}</Text>
-            </View>
-          )}
-          <Text style={styles.messageText}>{mainContent}</Text>
-        </View>
+      <View style={StyleSheet.absoluteFill}>
+        <Animated.View style={[styles.orb, { backgroundColor: THEME.primary, top: '20%', left: '10%', opacity: 0.2, transform: [{ translateX: t1 }, { scale: r1 }] }]} />
+        <Animated.View style={[styles.orb, { backgroundColor: THEME.secondary, bottom: '20%', right: '10%', opacity: 0.15, transform: [{ translateX: t2 }, { scale: r2 }] }]} />
+        <Animated.View style={[styles.orb, { backgroundColor: THEME.accent, top: '50%', left: '40%', opacity: 0.1, transform: [{ translateY: t3 }, { scale: r3 }] }]} />
       </View>
     );
   };
 
+  // --- HELPER COMPONENTS ---
 
-  // ════════════════════════════════════════════════════════
-  //  AGENT TAB COMPONENT
-  // ════════════════════════════════════════════════════════
-  const AgentTab = () => {
-    const QUICK = [
-      '🔍 ابحث عن آخر أخبار الذكاء الاصطناعي وقدم ملخصاً',
-      '🐛 شخّص سبب فشل بناء APK في GitHub Actions',
-      '📊 احسب: إذا عندي 7 مفاتيح API تتناوب، كم طلب أقصى في الدقيقة؟',
-      '🎨 ولّد صورة: مدينة مستقبلية بتصميم Nebula عربية الطراز',
-      '🔧 ابنِ تطبيق React Native بسيط لقائمة المهام',
-    ];
+  const GlassCard = ({ children, style }) => (
+    <View style={[styles.glassCard, style]}>
+      <BlurView intensity={10} style={StyleSheet.absoluteFill} tint="dark" />
+      {children}
+    </View>
+  );
 
-    const stepColor = {
-      goal: '#8b5cf6', thinking: '#3b82f6', thought: '#6366f1',
-      tool_call: '#f59e0b', observation: '#14b8a6', image: '#ec4899',
-      done: '#22c55e', error: '#ef4444',
-    };
-
-    const stepIcon = {
-      goal: 'flag', thinking: 'ellipsis-horizontal', thought: 'bulb',
-      tool_call: 'construct', observation: 'eye', image: 'image',
-      done: 'checkmark-circle', error: 'close-circle',
-    };
-
-    return (
-      <View style={{ flex: 1 }}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 160 }}>
-
-          {/* Header Card */}
-          <View style={agentStyles.headerCard}>
-            <LinearGradient colors={['rgba(139,92,246,0.3)','rgba(59,130,246,0.15)']} style={StyleSheet.absoluteFill} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-              <View style={agentStyles.agentBadge}>
-                <Text style={{ fontSize: 20 }}>🤖</Text>
-              </View>
-              <View style={{ marginLeft: 12 }}>
-                <Text style={agentStyles.agentTitle}>Autonomous Agent</Text>
-                <Text style={agentStyles.agentSub}>ReAct Loop · 10 أدوات · ذاكرة دائمة</Text>
-              </View>
-              {agentRunning && <ActivityIndicator color="#8b5cf6" style={{ marginLeft: 'auto' }} />}
-            </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {['search_web','fetch_url','calculate','generate_image','build_app','push_github','fix_error','read_memory'].map(t => (
-                <View key={t} style={agentStyles.toolBadge}>
-                  <Text style={agentStyles.toolBadgeText}>{t}</Text>
-                </View>
-              ))}
-            </View>
+  const PremiumButton = ({ title, onPress, icon, style, loading }) => (
+    <TouchableOpacity onPress={onPress} disabled={loading} activeOpacity={0.8} style={[styles.btnContainer, style]}>
+      <LinearGradient colors={[THEME.primary, THEME.primaryGlow]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.btnGradient}>
+        {loading ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <View style={styles.btnContent}>
+            {icon && <Ionicons name={icon} size={20} color="#fff" style={{ marginRight: 8 }} />}
+            <Text style={styles.btnText}>{title}</Text>
           </View>
-
-          {/* Quick Tasks */}
-          {agentSteps.length === 0 && (
-            <View style={{ marginBottom: 16 }}>
-              <Text style={agentStyles.sectionLabel}>⚡ مهام سريعة</Text>
-              {QUICK.map((q, i) => (
-                <TouchableOpacity key={i} style={agentStyles.quickCard}
-                  onPress={() => setAgentGoal(q)} activeOpacity={0.7}>
-                  <Text style={agentStyles.quickText}>{q}</Text>
-                  <Ionicons name="arrow-forward" size={16} color="#8b5cf6" />
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Steps Display */}
-          {agentSteps.map((step) => (
-            <View key={step.id} style={[agentStyles.stepCard, { borderLeftColor: stepColor[step.type] || '#fff' }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                <Ionicons
-                  name={stepIcon[step.type] || 'information-circle'}
-                  size={18}
-                  color={stepColor[step.type] || '#fff'}
-                  style={{ marginRight: 8, marginTop: 2 }}
-                />
-                <View style={{ flex: 1 }}>
-                  {step.imageUrl ? (
-                    <>
-                      <Text style={agentStyles.stepText}>{step.text.replace(step.imageUrl,'').trim() || '🎨 صورة منتجة:'}</Text>
-                      <Image source={{ uri: step.imageUrl }} style={agentStyles.stepImage} resizeMode="cover" />
-                    </>
-                  ) : (
-                    <Text style={[agentStyles.stepText, step.type === 'thought' && { fontStyle: 'italic', color: '#a5b4fc' }]}>
-                      {step.text}
-                    </Text>
-                  )}
-                  <Text style={agentStyles.stepTs}>{step.ts}</Text>
-                </View>
-              </View>
-            </View>
-          ))}
-
-          {/* History */}
-          {agentHistory.length > 0 && agentSteps.length === 0 && (
-            <View style={{ marginTop: 8 }}>
-              <Text style={agentStyles.sectionLabel}>📜 المهام السابقة</Text>
-              {agentHistory.slice(-5).reverse().map((h, i) => (
-                <TouchableOpacity key={i} style={agentStyles.historyCard}
-                  onPress={() => setAgentGoal(h.goal)} activeOpacity={0.8}>
-                  <Text style={{ color: '#c4b5fd', fontSize: 13 }} numberOfLines={1}>{h.goal}</Text>
-                  <Text style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }} numberOfLines={2}>{h.answer?.slice(0,100)}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-        </ScrollView>
-
-        {/* Goal Input */}
-        <BlurView intensity={80} tint="dark" style={agentStyles.inputArea}>
-          <LinearGradient colors={['rgba(139,92,246,0.1)','transparent']} style={StyleSheet.absoluteFill} />
-          {agentSteps.length > 0 && (
-            <TouchableOpacity style={agentStyles.clearBtn} onPress={() => setAgentSteps([])}>
-              <Ionicons name="trash-outline" size={18} color="#94a3b8" />
-              <Text style={{ color: '#94a3b8', fontSize: 12, marginLeft: 4 }}>مسح</Text>
-            </TouchableOpacity>
-          )}
-          <View style={agentStyles.inputRow}>
-            <TextInput
-              style={agentStyles.goalInput}
-              placeholder="اكتب مهمتك… سأخطط وأنفذها تلقائياً 🤖"
-              placeholderTextColor="#4a5568"
-              value={agentGoal}
-              onChangeText={setAgentGoal}
-              multiline
-              editable={!agentRunning}
-              onSubmitEditing={runAgent}
-            />
-            <TouchableOpacity
-              style={[agentStyles.runBtn, agentRunning && { opacity: 0.5 }]}
-              onPress={agentRunning ? null : runAgent}
-              activeOpacity={0.8}
-            >
-              <LinearGradient colors={['#8b5cf6','#3b82f6']} style={agentStyles.runBtnGrad}>
-                {agentRunning
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Ionicons name="play" size={22} color="#fff" />}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </BlurView>
-      </View>
-    );
-  };
-
-  const TabButton = ({ name, icon }) => (
-    <TouchableOpacity 
-      style={styles.tabItem} 
-      onPress={() => setActiveTab(name)}
-      activeOpacity={0.7}
-    >
-      <Animated.View style={[styles.tabIconContainer, activeTab === name && styles.tabActive]}>
-        <Ionicons 
-          name={icon} 
-          size={24} 
-          color={activeTab === name ? NEBULA_THEME.primary : NEBULA_THEME.textSecondary} 
-        />
-        {activeTab === name && <View style={styles.tabDot} />}
-      </Animated.View>
-      <Text style={[styles.tabText, activeTab === name && { color: NEBULA_THEME.text }]}>{name}</Text>
+        )}
+      </LinearGradient>
     </TouchableOpacity>
   );
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <AnimatedBackground />
+  const ShimmerLoading = () => {
+    const anim = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+      Animated.loop(Animated.timing(anim, { toValue: 1, duration: 1500, useNativeDriver: true })).start();
+    }, []);
+    const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [-width, width] });
+    return (
+      <View style={styles.shimmerBox}>
+        <Animated.View style={[styles.shimmerLine, { transform: [{ translateX }] }]}>
+          <LinearGradient colors={['transparent', 'rgba(255,255,255,0.1)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+        </Animated.View>
+      </View>
+    );
+  };
 
-      {/* HEADER */}
-      <BlurView intensity={80} tint="dark" style={styles.header}>
-        <LinearGradient colors={['rgba(139, 92, 246, 0.2)', 'transparent']} style={StyleSheet.absoluteFill} />
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>NEBULA STUDIO</Text>
+  // --- MAIN APP ---
+
+  export default function App() {
+    const [activeTab, setActiveTab] = useState('Chat');
+    const [messages, setMessages] = useState([]);
+    const [input, setInput] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
+    const [keys, setKeys] = useState({});
+    const [showVault, setShowVault] = useState(false);
+    
+    // Agent State
+    const [agentGoal, setAgentGoal] = useState('');
+    const [agentSteps, setAgentSteps] = useState([]);
+    const [agentRunning, setAgentRunning] = useState(false);
+    const [agentMemory, setAgentMemory] = useState({});
+    const [agentHistory, setAgentHistory] = useState([]);
+
+    // Vision State
+    const [visionImage, setVisionImage] = useState(null);
+    const [visionResult, setVisionResult] = useState('');
+
+    // Search State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+
+    // Create State
+    const [createPrompt, setCreatePrompt] = useState('');
+    const [creationImage, setCreationImage] = useState(null);
+    const [storyboard, setStoryboard] = useState(null);
+
+    // Build State
+    const [buildPrompt, setBuildPrompt] = useState('');
+    const [buildCode, setBuildCode] = useState('');
+    const [lastCommitUrl, setLastCommitUrl] = useState('');
+
+    const groqIndex = useRef(0);
+    const scrollRef = useRef();
+
+    useEffect(() => {
+      loadKeys();
+    }, []);
+
+    const loadKeys = async () => {
+      try {
+        const savedKeys = {
+          GITHUB_TOKEN: await SecureStore.getItemAsync('GITHUB_TOKEN') || process.env.EXPO_PUBLIC_GITHUB_TOKEN,
+          JINA_KEY: await SecureStore.getItemAsync('JINA_KEY'),
+          GROQ_OVERRIDE: await SecureStore.getItemAsync('GROQ_OVERRIDE'),
+        };
+        setKeys(savedKeys);
+        if (!savedKeys.GITHUB_TOKEN) setShowVault(true);
+      } catch (e) {
+        console.error('Keys load error', e);
+      }
+    };
+
+    const saveKey = async (key, val) => {
+      await SecureStore.setItemAsync(key, val);
+      setKeys(prev => ({ ...prev, [key]: val }));
+    };
+
+    const getGroqKey = () => {
+      if (keys.GROQ_OVERRIDE) return keys.GROQ_OVERRIDE;
+      const n = (groqIndex.current % 7) + 1;
+      groqIndex.current++;
+      return process.env['EXPO_PUBLIC_GROQ_KEY_' + n] || '';
+    };
+
+    const callGroq = async (prompt, model, history = [], system = '') => {
+      const key = getGroqKey();
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + key,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            ...(system ? [{ role: 'system', content: system }] : []),
+            ...history,
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error?.message || 'Groq API Error');
+      }
+      return await response.json();
+    };
+
+    // --- TAB: CHAT ---
+
+    const handleSend = async () => {
+      if (!input.trim() || loading) return;
+      const userMsg = { id: Date.now().toString(), role: 'user', content: input };
+      setMessages(prev => [...prev, userMsg]);
+      setInput('');
+      setLoading(true);
+
+      try {
+        const res = await callGroq(input, selectedModel, messages.map(m => ({ role: m.role, content: m.content })));
+        const aiMsg = { id: (Date.now() + 1).toString(), role: 'assistant', content: res.choices[0].message.content };
+        setMessages(prev => [...prev, aiMsg]);
+      } catch (e) {
+        Alert.alert('Error', e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // --- TAB: VISION ---
+
+    const pickVisionImage = async () => {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.5,
+        base64: true,
+      });
+      if (!result.canceled) setVisionImage(result.assets[0]);
+    };
+
+    const analyzeVision = async () => {
+      if (!visionImage || loading) return;
+      setLoading(true);
+      setVisionResult('');
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + getGroqKey(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'llama-3.2-90b-vision-preview',
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Analyze this image in extreme detail.' },
+                { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + visionImage.base64 } }
+              ]
+            }]
+          })
+        });
+        const data = await res.json();
+        setVisionResult(data.choices[0].message.content);
+      } catch (e) {
+        Alert.alert('Vision Error', e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // --- TAB: SEARCH ---
+
+    const handleSearch = async () => {
+      if (!searchQuery.trim() || loading) return;
+      setLoading(true);
+      setSearchResults([]);
+      try {
+        const r = await fetch('https://s.jina.ai/' + encodeURIComponent(searchQuery), {
+          headers: { 'Accept': 'application/json', 'X-Return-Format': 'markdown' }
+        });
+        const d = await r.json();
+        setSearchResults(d.data || []);
+      } catch (e) {
+        Alert.alert('Search Error', e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // --- TAB: CREATE ---
+
+    const handleGenerateImage = () => {
+      if (!createPrompt.trim()) return;
+      const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(createPrompt) + '?width=1024&height=1024&nologo=true&seed=' + Date.now();
+      setCreationImage(url);
+    };
+
+    const handleStoryboard = async () => {
+      if (!createPrompt.trim() || loading) return;
+      setLoading(true);
+      try {
+        const res = await callGroq(`Create a 4-scene storyboard for: ${createPrompt}. Return JSON: [{"scene":1,"prompt":"..."},{"scene":2,"prompt":"..."}]`, 'meta-llama/llama-4-maverick-17b-128e-instruct');
+        const text = res.choices[0].message.content;
+        const scenes = JSON.parse(text.match(/\[[\s\S]*\]/)[0]);
+        setStoryboard(scenes.map(s => ({
+          ...s,
+          url: 'https://image.pollinations.ai/prompt/' + encodeURIComponent(s.prompt) + '?width=512&height=512&nologo=true&seed=' + Math.random()
+        })));
+      } catch (e) {
+        Alert.alert('Storyboard Error', e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // --- TAB: BUILD ---
+
+    const handleBuild = async () => {
+      if (!buildPrompt.trim() || loading) return;
+      setLoading(true);
+      setBuildCode('');
+      try {
+        const res = await callGroq(`Write a single-file React Native Expo App.tsx for: ${buildPrompt}. Return ONLY code, no markdown.`, 'meta-llama/llama-4-maverick-17b-128e-instruct');
+        const code = res.choices[0].message.content;
+        setBuildCode(code);
+        
+        if (keys.GITHUB_TOKEN) {
+          const repo = 'alhsryahmd266-jpg/ai-studio-apk';
+          const path = 'generated_app.tsx';
+          const msg = 'Build from Nebula Studio Pro';
+          
+          const shaRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, { headers: { Authorization: 'token ' + keys.GITHUB_TOKEN } });
+          const shaJson = await shaRes.json();
+          
+          const pushRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+            method: 'PUT',
+            headers: { Authorization: 'token ' + keys.GITHUB_TOKEN, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: msg,
+              content: btoa(unescape(encodeURIComponent(code))),
+              ...(shaJson.sha ? { sha: shaJson.sha } : {})
+            })
+          });
+          const pushData = await pushRes.json();
+          if (pushData.commit) setLastCommitUrl(pushData.commit.html_url);
+        }
+      } catch (e) {
+        Alert.alert('Build Error', e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // --- TAB: AGENT ---
+
+    const AGENT_SYSTEM = `You are an autonomous AI agent with full tool access.
+  You operate in a ReAct loop: Think → Act → Observe → Repeat.
+
+  TOOLS (call with exact syntax):
+    [TOOL: search_web    | {"query":"..."}]
+    [TOOL: fetch_url     | {"url":"https://..."}]
+    [TOOL: calculate     | {"expr":"2+2"}]
+    [TOOL: get_datetime  | {}]
+    [TOOL: generate_image| {"prompt":"..."}]
+    [TOOL: build_app     | {"description":"..."}]
+    [TOOL: push_github   | {"token":"...","repo":"owner/repo","path":"App.tsx","content":"...","message":"..."}]
+    [TOOL: read_memory   | {"key":"..."}]
+    [TOOL: save_memory   | {"key":"...","value":"..."}]
+    [TOOL: fix_error     | {"error":"...","context":"..."}]
+
+  RULES:
+  1. Start with THOUGHT: analyse the goal.
+  2. Use exactly one tool per step.
+  3. After OBSERVATION, decide next step.
+  4. Write FINAL ANSWER: when done.
+  5. If something fails, call fix_error to diagnose and retry.
+  6. You have up to 10 iterations — be efficient.`;
+
+    const agentTools = {
+      search_web: async ({ query }) => {
+        try {
+          const r = await fetch('https://s.jina.ai/' + encodeURIComponent(query), { headers: { Accept: 'application/json' } });
+          const d = await r.json();
+          return JSON.stringify(d).slice(0, 3000);
+        } catch (e) { return 'Search failed: ' + e.message; }
+      },
+      fetch_url: async ({ url }) => {
+        try {
+          const r = await fetch('https://r.jina.ai/' + url, { headers: { Accept: 'text/plain' } });
+          return (await r.text()).slice(0, 3000);
+        } catch (e) { return 'Fetch failed: ' + e.message; }
+      },
+      calculate: ({ expr }) => { try { return String(eval(expr)); } catch (e) { return 'Calc error: ' + e.message; } },
+      get_datetime: () => new Date().toLocaleString(),
+      generate_image: async ({ prompt }) => 'IMAGE_URL::https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=768&height=768&nologo=true&seed=' + Date.now(),
+      build_app: async ({ description }) => {
+        try {
+          const res = await callGroq('Write complete React Native code for: ' + description, 'meta-llama/llama-4-maverick-17b-128e-instruct');
+          return res.choices[0].message.content.slice(0, 4000);
+        } catch (e) { return 'Build failed: ' + e.message; }
+      },
+      push_github: async ({ token, repo, path, content, message }) => {
+        try {
+          const tk = token || keys.GITHUB_TOKEN;
+          if (!tk) return 'Error: No GitHub token.';
+          const shaRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, { headers: { Authorization: 'token ' + tk } });
+          const shaJson = await shaRes.json();
+          const r = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+            method: 'PUT',
+            headers: { Authorization: 'token ' + tk, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, content: btoa(unescape(encodeURIComponent(content))), ...(shaJson.sha ? { sha: shaJson.sha } : {}) })
+          });
+          const j = await r.json();
+          return j.commit ? 'Pushed ✅ ' + j.commit.sha.slice(0, 8) : 'Push failed';
+        } catch (e) { return 'Push error: ' + e.message; }
+      },
+      read_memory: ({ key }) => agentMemory[key] || 'Not found',
+      save_memory: ({ key, value }) => { setAgentMemory(p => ({ ...p, [key]: value })); return 'Saved'; },
+      fix_error: async ({ error, context }) => {
+        try {
+          const res = await callGroq(`Diagnose error: ${error}. Context: ${context}`, 'deepseek-r1-distill-llama-70b');
+          return res.choices[0].message.content;
+        } catch (e) { return 'Diagnosis failed'; }
+      }
+    };
+
+    const runAgent = async () => {
+      if (!agentGoal.trim() || agentRunning) return;
+      setAgentRunning(true);
+      setAgentSteps([{ id: 1, type: 'goal', text: '🎯 Goal: ' + agentGoal, ts: new Date().toLocaleTimeString() }]);
+      
+      let history = [];
+      let iteration = 0;
+      const MAX_ITER = 10;
+
+      try {
+        while (iteration < MAX_ITER) {
+          iteration++;
+          const prompt = iteration === 1 ? 'GOAL: ' + agentGoal : 'Next step? History so far:\n' + history.slice(-3).map(h => h.role + ': ' + h.content.slice(0, 200)).join('\n');
+          
+          const llmRes = await callGroq(prompt, selectedModel, history, AGENT_SYSTEM);
+          const rawText = llmRes.choices[0].message.content;
+          history.push({ role: 'assistant', content: rawText });
+
+          const thinkMatch = rawText.match(/<think>([\s\S]*?)<\/think>/i);
+          if (thinkMatch) {
+            setAgentSteps(p => [...p, { id: Date.now() + 1, type: 'thought', text: '💭 ' + thinkMatch[1].trim(), ts: new Date().toLocaleTimeString() }]);
+          }
+
+          if (/FINAL ANSWER:/i.test(rawText)) {
+            const answer = rawText.split(/FINAL ANSWER:/i)[1]?.trim() || rawText;
+            setAgentSteps(p => [...p, { id: Date.now() + 2, type: 'done', text: '✅ Final: ' + answer, ts: new Date().toLocaleTimeString() }]);
+            setAgentHistory(p => [{ goal: agentGoal, answer, ts: new Date().toISOString() }, ...p]);
+            break;
+          }
+
+          const toolMatch = rawText.match(/\[TOOL:\s*(\w+)\s*\|\s*(\{[^\]]*\})\]/s);
+          if (toolMatch) {
+            const name = toolMatch[1].trim();
+            const args = JSON.parse(toolMatch[2]);
+            setAgentSteps(p => [...p, { id: Date.now() + 3, type: 'tool_call', text: '🔧 Tool: ' + name, ts: new Date().toLocaleTimeString() }]);
+            
+            let obs = '';
+            try {
+              const res = await agentTools[name](args);
+              obs = typeof res === 'string' ? res : JSON.stringify(res);
+            } catch (e) { obs = 'Error: ' + e.message; }
+            
+            const isImg = obs.startsWith('IMAGE_URL::');
+            setAgentSteps(p => [...p, {
+              id: Date.now() + 4,
+              type: isImg ? 'image' : 'observation',
+              text: isImg ? obs.replace('IMAGE_URL::', '') : '👁️ Result: ' + obs.slice(0, 500),
+              ts: new Date().toLocaleTimeString(),
+              imageUrl: isImg ? obs.replace('IMAGE_URL::', '') : null
+            }]);
+            history.push({ role: 'user', content: 'OBSERVATION: ' + obs.slice(0, 2000) });
+          } else if (iteration >= MAX_ITER) {
+             setAgentSteps(p => [...p, { id: Date.now() + 5, type: 'done', text: '⚠️ Limit reached. Last: ' + rawText.slice(0, 300), ts: new Date().toLocaleTimeString() }]);
+          }
+        }
+      } catch (e) {
+        setAgentSteps(p => [...p, { id: Date.now() + 6, type: 'error', text: '❌ Agent Error: ' + e.message, ts: new Date().toLocaleTimeString() }]);
+      } finally {
+        setAgentRunning(false);
+      }
+    };
+
+    // --- RENDER HELPERS ---
+
+    const renderTabIcon = (name, icon, lib = 'Ionicons') => {
+      const active = activeTab === name;
+      const IconComp = lib === 'Ionicons' ? Ionicons : FontAwesome5;
+      return (
+        <TouchableOpacity onPress={() => setActiveTab(name)} style={styles.tabItem}>
+          <IconComp name={icon} size={24} color={active ? THEME.primary : THEME.textSecondary} />
+          <Text style={[styles.tabLabel, { color: active ? THEME.primary : THEME.textSecondary }]}>{name}</Text>
+          {active && <View style={styles.activeDot} />}
+        </TouchableOpacity>
+      );
+    };
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <StarField />
+        <NebulaOrbs />
+
+        <View style={styles.header}>
+          <View style={styles.titleRow}>
+            <Text style={styles.nebulaText}>NEBULA</Text>
+            <Text style={styles.studioText}>STUDIO PRO</Text>
+          </View>
           <TouchableOpacity onPress={() => setShowVault(true)}>
-            <Ionicons name="key" size={20} color={NEBULA_THEME.textSecondary} />
+            <Ionicons name="key-outline" size={24} color={keys.GITHUB_TOKEN ? THEME.success : THEME.textSecondary} />
           </TouchableOpacity>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modelBar}>
-          {MODELS.map(m => (
-            <TouchableOpacity 
-              key={m.id} 
-              onPress={() => setSelectedModel(m.id)}
-              style={[styles.modelChip, selectedModel === m.id && styles.modelChipActive]}
-            >
-              <FontAwesome5 name={m.icon} size={12} color={selectedModel === m.id ? '#fff' : NEBULA_THEME.textSecondary} />
-              <Text style={[styles.modelChipText, selectedModel === m.id && { color: '#fff' }]}>{m.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </BlurView>
 
-      {/* ERROR BANNER */}
-      {error && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={() => setError(null)}><Ionicons name="close" size={20} color="#fff" /></TouchableOpacity>
-        </View>
-      )}
-
-      {/* MAIN CONTENT */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <View style={{ flex: 1 }}>
-          
-          {activeTab === 'Chat' && (
-            <>
-              <FlatList
-                ref={scrollRef}
-                data={messages}
-                renderItem={renderMessage}
-                keyExtractor={m => m.id}
-                contentContainerStyle={{ padding: 15, paddingBottom: 100 }}
-                onContentSizeChange={() => scrollRef.current?.scrollToEnd()}
-              />
-              <BlurView intensity={50} style={styles.inputBar}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ask anything..."
-                  placeholderTextColor={NEBULA_THEME.textSecondary}
-                  value={input}
-                  onChangeText={setInput}
-                  multiline
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <View style={styles.tabContent}>
+            {activeTab === 'Chat' && (
+              <View style={{ flex: 1 }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modelBar}>
+                  {MODELS.map(m => (
+                    <TouchableOpacity
+                      key={m.id}
+                      onPress={() => setSelectedModel(m.id)}
+                      style={[styles.modelChip, selectedModel === m.id && styles.modelChipActive]}
+                    >
+                      <FontAwesome5 name={m.icon} size={12} color={selectedModel === m.id ? '#fff' : THEME.textSecondary} />
+                      <Text style={[styles.modelChipText, { color: selectedModel === m.id ? '#fff' : THEME.textSecondary }]}>{m.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <FlatList
+                  ref={scrollRef}
+                  data={messages}
+                  keyExtractor={m => m.id}
+                  contentContainerStyle={{ padding: 16 }}
+                  onContentSizeChange={() => scrollRef.current?.scrollToEnd()}
+                  renderItem={({ item }) => (
+                    <View style={[styles.msgWrapper, item.role === 'user' ? styles.msgUser : styles.msgAI]}>
+                      <GlassCard style={styles.msgCard}>
+                        <Text style={styles.msgText}>{item.content}</Text>
+                      </GlassCard>
+                    </View>
+                  )}
                 />
-                <TouchableOpacity 
-                  style={styles.sendBtn} 
-                  onPress={() => { if(input.trim()) { runAgent(input); setInput(''); } }}
-                  disabled={loading}
-                >
-                  {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="send" size={20} color="#fff" />}
-                </TouchableOpacity>
-              </BlurView>
-            </>
-          )}
+                {loading && <ShimmerLoading />}
+                <View style={styles.inputArea}>
+                  <GlassCard style={styles.inputGlass}>
+                    <TextInput
+                      value={input}
+                      onChangeText={setInput}
+                      placeholder="Enter message..."
+                      placeholderTextColor={THEME.textSecondary}
+                      style={styles.textInput}
+                      multiline
+                    />
+                    <TouchableOpacity onPress={handleSend} style={styles.sendBtn}>
+                      <LinearGradient colors={[THEME.primary, THEME.primaryGlow]} style={styles.sendGradient}>
+                        <Ionicons name="send" size={20} color="#fff" />
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </GlassCard>
+                </View>
+              </View>
+            )}
 
-          {activeTab === 'Vision' && (
-            <View style={styles.tabContent}>
-              <TouchableOpacity style={styles.uploadArea} onPress={pickImage}>
-                {visionImage ? (
-                  <Image source={{ uri: visionImage.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                ) : (
-                  <View style={{ alignItems: 'center' }}>
-                    <Ionicons name="camera" size={48} color={NEBULA_THEME.primary} />
-                    <Text style={styles.uploadText}>Pick Image</Text>
+            {activeTab === 'Vision' && (
+              <ScrollView contentContainerStyle={{ padding: 20 }}>
+                <Text style={styles.tabTitle}>Vision 90B</Text>
+                <TouchableOpacity onPress={pickVisionImage} style={styles.dropZone}>
+                  {visionImage ? (
+                    <Image source={{ uri: visionImage.uri }} style={styles.previewImg} />
+                  ) : (
+                    <View style={styles.dropContent}>
+                      <Ionicons name="image-outline" size={48} color={THEME.textSecondary} />
+                      <Text style={styles.dropText}>Select Image to Analyze</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <PremiumButton title="Analyze Image" onPress={analyzeVision} icon="eye" loading={loading} />
+                {visionResult && (
+                  <GlassCard style={styles.resultCard}>
+                    <Text style={styles.resultTitle}>Analysis</Text>
+                    <Text style={styles.resultText}>{visionResult}</Text>
+                  </GlassCard>
+                )}
+              </ScrollView>
+            )}
+
+            {activeTab === 'Search' && (
+              <View style={{ flex: 1, padding: 16 }}>
+                <GlassCard style={styles.searchBar}>
+                  <Ionicons name="search" size={20} color={THEME.textSecondary} />
+                  <TextInput
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Deep search the web..."
+                    placeholderTextColor={THEME.textSecondary}
+                    style={styles.searchInput}
+                    onSubmitEditing={handleSearch}
+                  />
+                </GlassCard>
+                <FlatList
+                  data={searchResults}
+                  keyExtractor={(item, idx) => idx.toString()}
+                  renderItem={({ item }) => (
+                    <GlassCard style={styles.searchResultCard}>
+                      <Text style={styles.searchResultTitle}>{item.title}</Text>
+                      <Text style={styles.searchResultDesc} numberOfLines={3}>{item.description || item.content}</Text>
+                      <TouchableOpacity onPress={() => Linking.openURL(item.url)}>
+                        <Text style={styles.searchResultUrl}>{item.url}</Text>
+                      </TouchableOpacity>
+                    </GlassCard>
+                  )}
+                />
+              </View>
+            )}
+
+            {activeTab === 'Create' && (
+              <ScrollView contentContainerStyle={{ padding: 16 }}>
+                <Text style={styles.tabTitle}>Studio Engine</Text>
+                <GlassCard style={styles.createInputCard}>
+                  <TextInput
+                    value={createPrompt}
+                    onChangeText={setCreatePrompt}
+                    placeholder="Describe your masterpiece..."
+                    placeholderTextColor={THEME.textSecondary}
+                    style={styles.createInput}
+                    multiline
+                  />
+                </GlassCard>
+                <View style={styles.btnRow}>
+                  <PremiumButton title="Image" onPress={handleGenerateImage} icon="image" style={{ flex: 1, marginRight: 8 }} />
+                  <PremiumButton title="Storyboard" onPress={handleStoryboard} icon="film" style={{ flex: 1 }} loading={loading} />
+                </View>
+                {creationImage && (
+                  <View style={styles.creationWrapper}>
+                    <Image source={{ uri: creationImage }} style={styles.creationImg} />
+                    <PremiumButton title="Download" onPress={() => Share.share({ url: creationImage })} icon="download" style={styles.absBtn} />
                   </View>
                 )}
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.actionBtn, !visionImage && { opacity: 0.5 }]} 
-                onPress={analyzeImage} 
-                disabled={loading || !visionImage}
-              >
-                <Text style={styles.actionBtnText}>{loading ? 'Analyzing...' : 'Analyze with Vision 90B'}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {activeTab === 'Search' && (
-            <View style={styles.tabContent}>
-              <TextInput 
-                style={styles.searchBox} 
-                placeholder="Search the web..." 
-                placeholderTextColor={NEBULA_THEME.textSecondary}
-                onSubmitEditing={(e) => doSearch(e.nativeEvent.text)}
-              />
-              <ScrollView>
-                {loading && <Shimmer />}
-                {searchResults.map((res, i) => (
-                  <TouchableOpacity key={i} style={styles.searchResult} onPress={() => Linking.openURL(res.url)}>
-                    <Text style={styles.resultTitle}>{res.title}</Text>
-                    <Text style={styles.resultUrl}>{res.url}</Text>
-                    <Text style={styles.resultSnippet} numberOfLines={2}>{res.description}</Text>
-                  </TouchableOpacity>
-                ))}
+                {storyboard && (
+                  <View style={styles.storyboardGrid}>
+                    {storyboard.map((s, i) => (
+                      <GlassCard key={i} style={styles.storyCard}>
+                        <Image source={{ uri: s.url }} style={styles.storyImg} />
+                        <Text style={styles.storyText}>Scene {s.scene}</Text>
+                      </GlassCard>
+                    ))}
+                  </View>
+                )}
               </ScrollView>
-            </View>
-          )}
+            )}
 
-          {activeTab === 'Create' && (
-            <ScrollView style={styles.tabContent}>
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>AI Image Generator</Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="Describe your art..." 
-                  placeholderTextColor={NEBULA_THEME.textSecondary}
-                  onSubmitEditing={(e) => generateImg(e.nativeEvent.text)}
-                />
-                {creationImage && <Image source={{ uri: creationImage }} style={styles.previewImg} />}
-              </View>
+            {activeTab === 'Build' && (
+              <ScrollView contentContainerStyle={{ padding: 16 }}>
+                <Text style={styles.tabTitle}>Nebula Forge</Text>
+                <GlassCard style={styles.buildCard}>
+                  <TextInput
+                    value={buildPrompt}
+                    onChangeText={setBuildPrompt}
+                    placeholder="What app should I build for you?"
+                    placeholderTextColor={THEME.textSecondary}
+                    style={styles.buildInput}
+                    multiline
+                  />
+                </GlassCard>
+                <PremiumButton title="Generate & Push to GitHub" onPress={handleBuild} icon="code-slash" loading={loading} />
+                {lastCommitUrl && (
+                  <TouchableOpacity onPress={() => Linking.openURL(lastCommitUrl)} style={styles.commitLink}>
+                    <Ionicons name="logo-github" size={16} color={THEME.success} />
+                    <Text style={styles.commitText}>View Commit on GitHub</Text>
+                  </TouchableOpacity>
+                )}
+                {buildCode && (
+                  <GlassCard style={styles.codePreview}>
+                    <Text style={styles.codeText}>{buildCode.slice(0, 1000)}...</Text>
+                  </GlassCard>
+                )}
+              </ScrollView>
+            )}
 
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>Video Storyboard</Text>
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="Movie concept..." 
-                  placeholderTextColor={NEBULA_THEME.textSecondary}
-                  onSubmitEditing={(e) => makeStoryboard(e.nativeEvent.text)}
-                />
-                {storyboard && storyboard.map((s, i) => (
-                  <View key={i} style={styles.storyCard}>
-                    <Text style={styles.storyIdx}>{i+1}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.storyTitle}>{s.title}</Text>
-                      <Text style={styles.storyDesc}>{s.description}</Text>
-                      <Text style={styles.storyVisual}>🎬 {s.visual}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          )}
+            {activeTab === 'Vault' && (
+              <ScrollView contentContainerStyle={{ padding: 20 }}>
+                <Text style={styles.tabTitle}>Neural Vault</Text>
+                <GlassCard style={styles.vaultCard}>
+                  <VaultItem label="GitHub Token" value={keys.GITHUB_TOKEN} onSave={v => saveKey('GITHUB_TOKEN', v)} />
+                  <VaultItem label="Jina AI Key" value={keys.JINA_KEY} onSave={v => saveKey('JINA_KEY', v)} />
+                  <VaultItem label="Groq Override" value={keys.GROQ_OVERRIDE} onSave={v => saveKey('GROQ_OVERRIDE', v)} />
+                </GlassCard>
+                <PremiumButton title="Close Vault" onPress={() => setShowVault(false)} />
+              </ScrollView>
+            )}
 
-          {activeTab === 'Build' && (
-            <View style={styles.tabContent}>
-              <Text style={styles.cardLabel}>Build React Native App</Text>
-              <TextInput 
-                style={styles.searchBox} 
-                placeholder="Describe your app (e.g. Weather app with gradients)..." 
-                placeholderTextColor={NEBULA_THEME.textSecondary}
-                value={buildPrompt}
-                onChangeText={setBuildPrompt}
-                multiline
-              />
-              <TouchableOpacity style={styles.actionBtn} onPress={pushToGithub} disabled={loading}>
-                <Text style={styles.actionBtnText}>{loading ? 'Building & Pushing...' : 'Push to GitHub'}</Text>
-              </TouchableOpacity>
-              {lastCommitUrl && (
-                <TouchableOpacity onPress={() => Linking.openURL(lastCommitUrl)}>
-                  <Text style={styles.linkText}>View Commit: {lastCommitUrl.substring(0, 40)}...</Text>
-                </TouchableOpacity>
-              )}
-              {buildCode && (
-                <ScrollView style={styles.codeBlock}>
-                  <Text style={styles.codeText}>{buildCode}</Text>
-                </ScrollView>
-              )}
-            </View>
-          )}
-
-          {activeTab === 'Agent' && <AgentTab />}
-
-          {activeTab === 'Vault' && (
-             <View style={styles.tabContent}>
-                <Text style={styles.cardLabel}>Encrypted Vault</Text>
-                {['GITHUB_TOKEN', 'JINA_KEY', 'GROQ_OVERRIDE'].map(k => (
-                  <View key={k} style={styles.card}>
-                    <Text style={styles.kLabel}>{k}</Text>
-                    <TextInput 
-                      style={styles.kInput} 
-                      secureTextEntry 
-                      placeholder="Enter value..."
-                      placeholderTextColor="#444"
-                      value={keys[k]}
-                      onChangeText={(v) => saveKey(k, v)}
+            {activeTab === 'Agent' && (
+              <View style={{ flex: 1 }}>
+                <View style={{ padding: 16 }}>
+                  <GlassCard style={styles.agentInputCard}>
+                    <TextInput
+                      value={agentGoal}
+                      onChangeText={setAgentGoal}
+                      placeholder="Set autonomous goal..."
+                      placeholderTextColor={THEME.textSecondary}
+                      style={styles.agentInput}
                     />
-                  </View>
-                ))}
-                <Text style={styles.vNote}>Keys are stored in Android Keystore / iOS Keychain.</Text>
-             </View>
-          )}
+                    <TouchableOpacity onPress={runAgent} disabled={agentRunning} style={styles.runAgentBtn}>
+                      {agentRunning ? <ActivityIndicator color="#fff" /> : <Ionicons name="play" size={24} color="#fff" />}
+                    </TouchableOpacity>
+                  </GlassCard>
+                </View>
+                <FlatList
+                  data={agentSteps}
+                  keyExtractor={s => s.id.toString()}
+                  contentContainerStyle={{ padding: 16 }}
+                  renderItem={({ item }) => (
+                    <GlassCard style={[styles.agentStep, styles['agentStep_' + item.type]]}>
+                      <View style={styles.stepHeader}>
+                        <Text style={styles.stepType}>{item.type.toUpperCase()}</Text>
+                        <Text style={styles.stepTs}>{item.ts}</Text>
+                      </View>
+                      {item.type === 'image' ? (
+                         <Image source={{ uri: item.imageUrl }} style={styles.stepImage} />
+                      ) : (
+                         <Text style={styles.stepText}>{item.text}</Text>
+                      )}
+                    </GlassCard>
+                  )}
+                />
+              </View>
+            )}
+          </View>
+        </KeyboardAvoidingView>
 
+        <BlurView intensity={20} tint="dark" style={styles.bottomBar}>
+          <View style={styles.tabsInner}>
+            {renderTabIcon('Chat', 'chatbubble-ellipses-outline')}
+            {renderTabIcon('Vision', 'eye-outline')}
+            {renderTabIcon('Search', 'search-outline')}
+            {renderTabIcon('Create', 'color-palette-outline')}
+            {renderTabIcon('Build', 'code-outline')}
+            {renderTabIcon('Vault', 'lock-closed-outline')}
+            {renderTabIcon('Agent', 'hardware-chip-outline')}
+          </View>
+        </BlurView>
+
+        <Modal visible={showVault && activeTab !== 'Vault'} animationType="slide" transparent>
+           <BlurView intensity={80} style={StyleSheet.absoluteFill}>
+              <SafeAreaView style={{ flex: 1, justifyContent: 'center' }}>
+                 <TouchableOpacity style={styles.modalClose} onPress={() => setShowVault(false)}>
+                    <Ionicons name="close" size={32} color="#fff" />
+                 </TouchableOpacity>
+                 <VaultScreen keys={keys} saveKey={saveKey} />
+              </SafeAreaView>
+           </BlurView>
+        </Modal>
+      </SafeAreaView>
+    );
+  }
+
+  const VaultItem = ({ label, value, onSave }) => {
+    const [val, setVal] = useState(value || '');
+    return (
+      <View style={styles.vaultItem}>
+        <Text style={styles.vaultLabel}>{label}</Text>
+        <View style={styles.vaultRow}>
+          <TextInput
+            value={val}
+            onChangeText={setVal}
+            secureTextEntry
+            placeholder="••••••••"
+            placeholderTextColor={THEME.textSecondary}
+            style={styles.vaultInput}
+          />
+          <TouchableOpacity onPress={() => onSave(val)} style={styles.vaultSave}>
+            <Ionicons name="checkmark" size={20} color={THEME.success} />
+          </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      </View>
+    );
+  };
 
-      {/* TAB BAR */}
-      <BlurView intensity={90} tint="dark" style={styles.tabBar}>
-        <TabButton name="Chat" icon="chatbubble-ellipses" />
-        <TabButton name="Vision" icon="scan" />
-        <TabButton name="Search" icon="globe" />
-        <TabButton name="Create" icon="brush" />
-        <TabButton name="Build" icon="code-working" />
-        <TabButton name="Vault" icon="lock-closed" />
-        <TabButton name="Agent" icon="hardware-chip" />
-      </BlurView>
-
-      {/* VAULT MODAL */}
-      <Modal visible={showVault && activeTab !== 'Vault'} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <BlurView intensity={100} tint="dark" style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Authentication Required</Text>
-            <Text style={styles.modalDesc}>Please set your GitHub Token in the Vault to enable Build & Push features.</Text>
-            <TouchableOpacity style={styles.actionBtn} onPress={() => { setShowVault(false); setActiveTab('Vault'); }}>
-              <Text style={styles.actionBtnText}>Open Vault</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{ marginTop: 15 }} onPress={() => setShowVault(false)}>
-              <Text style={styles.textSecondary}>Dismiss</Text>
-            </TouchableOpacity>
-          </BlurView>
-        </View>
-      </Modal>
-
-    </SafeAreaView>
+  const VaultScreen = ({ keys, saveKey }) => (
+    <View style={{ padding: 20 }}>
+      <Text style={styles.tabTitle}>Neural Vault</Text>
+      <GlassCard style={styles.vaultCard}>
+        <VaultItem label="GitHub Token" value={keys.GITHUB_TOKEN} onSave={v => saveKey('GITHUB_TOKEN', v)} />
+        <VaultItem label="Jina AI Key" value={keys.JINA_KEY} onSave={v => saveKey('JINA_KEY', v)} />
+        <VaultItem label="Groq Override" value={keys.GROQ_OVERRIDE} onSave={v => saveKey('GROQ_OVERRIDE', v)} />
+      </GlassCard>
+    </View>
   );
-}
 
-
-  // ── AGENT STYLES ──────────────────────────────────────────
-  const agentStyles = StyleSheet.create({
-    headerCard: {
-      borderRadius: 18, padding: 16, marginBottom: 16, overflow: 'hidden',
-      borderWidth: 1, borderColor: 'rgba(139,92,246,0.3)',
+  /**
+   * CORE STYLESHEET
+   * Optimized for Glassmorphism and Neon Effects
+   */
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: THEME.background },
+    star: { position: 'absolute', backgroundColor: '#fff', borderRadius: 10 },
+    orb: { position: 'absolute', width: 300, height: 300, borderRadius: 150 },
+    header: {
+      height: 60,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: THEME.cardBorder,
     },
-    agentBadge: {
-      width: 48, height: 48, borderRadius: 14, backgroundColor: 'rgba(139,92,246,0.2)',
-      alignItems: 'center', justifyContent: 'center',
+    titleRow: { flexDirection: 'row', alignItems: 'center' },
+    nebulaText: { fontSize: 20, fontWeight: '900', color: THEME.primary, letterSpacing: 4 },
+    studioText: { fontSize: 20, fontWeight: '900', color: '#fff', letterSpacing: 4, marginLeft: 8 },
+    tabContent: { flex: 1 },
+    bottomBar: { height: 85, borderTopWidth: 1, borderTopColor: THEME.cardBorder },
+    tabsInner: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
+    tabItem: { alignItems: 'center', flex: 1 },
+    tabLabel: { fontSize: 10, marginTop: 4 },
+    activeDot: {
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: THEME.primary,
+      marginTop: 4,
+      shadowColor: THEME.primary,
+      shadowRadius: 5,
+      shadowOpacity: 1,
     },
-    agentTitle: { color: '#fff', fontSize: 17, fontWeight: '700', letterSpacing: 0.5 },
-    agentSub: { color: '#8b5cf6', fontSize: 12, marginTop: 2 },
-    toolBadge: {
-      backgroundColor: 'rgba(139,92,246,0.15)', borderRadius: 8, paddingHorizontal: 8,
-      paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(139,92,246,0.25)',
+    glassCard: {
+      backgroundColor: THEME.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: THEME.cardBorder,
+      overflow: 'hidden',
     },
-    toolBadgeText: { color: '#a78bfa', fontSize: 11, fontFamily: Platform.OS==='android'?'monospace':'Menlo' },
-    sectionLabel: { color: '#94a3b8', fontSize: 13, fontWeight: '600', marginBottom: 8, letterSpacing: 0.5 },
-    quickCard: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      backgroundColor: 'rgba(30,30,50,0.8)', borderRadius: 14, padding: 14, marginBottom: 8,
-      borderWidth: 1, borderColor: 'rgba(139,92,246,0.15)',
+    btnContainer: { height: 50, borderRadius: 25, overflow: 'hidden', marginVertical: 10 },
+    btnGradient: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    btnContent: { flexDirection: 'row', alignItems: 'center' },
+    btnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+    shimmerBox: { height: 4, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden', marginHorizontal: 20 },
+    shimmerLine: { width: '100%', height: '100%' },
+    modelBar: { maxHeight: 50, paddingHorizontal: 16, marginVertical: 10 },
+    modelChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(255,255,255,0.05)',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      marginRight: 8,
+      borderWidth: 1,
+      borderColor: 'transparent',
     },
-    quickText: { color: '#e2e8f0', fontSize: 13, flex: 1, marginRight: 8 },
-    stepCard: {
-      backgroundColor: 'rgba(15,15,25,0.9)', borderRadius: 12, padding: 12, marginBottom: 8,
-      borderLeftWidth: 3,
+    modelChipActive: { borderColor: THEME.primary, backgroundColor: 'rgba(124, 58, 237, 0.2)' },
+    modelChipText: { fontSize: 12, marginLeft: 6, fontWeight: '600' },
+    msgWrapper: { marginVertical: 8, maxWidth: '85%' },
+    msgUser: { alignSelf: 'flex-end' },
+    msgAI: { alignSelf: 'flex-start' },
+    msgCard: { padding: 12 },
+    msgText: { color: '#fff', lineHeight: 20 },
+    inputArea: { padding: 16 },
+    inputGlass: { flexDirection: 'row', alignItems: 'center', padding: 8 },
+    textInput: { flex: 1, color: '#fff', fontSize: 16, maxHeight: 100, paddingHorizontal: 12 },
+    sendBtn: { width: 40, height: 40, borderRadius: 20, overflow: 'hidden' },
+    sendGradient: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    tabTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
+    dropZone: {
+      height: 200,
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: THEME.cardBorder,
+      borderStyle: 'dashed',
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(255,255,255,0.02)',
+      marginBottom: 20,
     },
-    stepText: { color: '#e2e8f0', fontSize: 13, lineHeight: 20 },
-    stepTs: { color: '#4a5568', fontSize: 10, marginTop: 4 },
-    stepImage: { width: '100%', height: 240, borderRadius: 10, marginTop: 8 },
-    historyCard: {
-      backgroundColor: 'rgba(20,20,35,0.8)', borderRadius: 12, padding: 12, marginBottom: 6,
-      borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)',
-    },
-    inputArea: {
-      position: 'absolute', bottom: 0, left: 0, right: 0,
-      padding: 12, borderTopWidth: 1, borderTopColor: 'rgba(139,92,246,0.2)',
-    },
-    clearBtn: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, alignSelf: 'flex-end' },
-    inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-    goalInput: {
-      flex: 1, backgroundColor: 'rgba(30,30,50,0.9)', borderRadius: 16, padding: 12,
-      color: '#fff', fontSize: 14, maxHeight: 100, borderWidth: 1,
-      borderColor: 'rgba(139,92,246,0.3)',
-    },
-    runBtn: { width: 50, height: 50 },
-    runBtnGrad: { flex: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+    dropContent: { alignItems: 'center' },
+    dropText: { color: THEME.textSecondary, marginTop: 12 },
+    previewImg: { width: '100%', height: '100%', borderRadius: 14 },
+    resultCard: { padding: 16, marginTop: 20 },
+    resultTitle: { color: THEME.primary, fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
+    resultText: { color: '#fff', lineHeight: 22 },
+    searchBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 50, marginBottom: 16 },
+    searchInput: { flex: 1, color: '#fff', marginLeft: 10 },
+    searchResultCard: { padding: 16, marginBottom: 12 },
+    searchResultTitle: { color: THEME.secondary, fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+    searchResultDesc: { color: THEME.textSecondary, fontSize: 14, lineHeight: 18 },
+    searchResultUrl: { color: THEME.primary, fontSize: 12, marginTop: 8 },
+    createInputCard: { padding: 16, marginBottom: 16 },
+    createInput: { color: '#fff', fontSize: 16, minHeight: 80 },
+    btnRow: { flexDirection: 'row', marginBottom: 16 },
+    creationWrapper: { borderRadius: 16, overflow: 'hidden', marginTop: 10 },
+    creationImg: { width: '100%', aspectRatio: 1, borderRadius: 16 },
+    absBtn: { position: 'absolute', bottom: 10, right: 10, width: 140 },
+    storyboardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 10 },
+    storyCard: { width: '48%', marginBottom: 16 },
+    storyImg: { width: '100%', aspectRatio: 1 },
+    storyText: { color: '#fff', padding: 8, fontSize: 12, textAlign: 'center' },
+    buildCard: { padding: 16, marginBottom: 16 },
+    buildInput: { color: '#fff', fontSize: 16, minHeight: 120 },
+    codePreview: { padding: 16, marginTop: 20, backgroundColor: '#000' },
+    codeText: { color: '#0f0', fontFamily: 'monospace', fontSize: 10 },
+    commitLink: { flexDirection: 'row', alignItems: 'center', marginTop: 12, alignSelf: 'center' },
+    commitText: { color: THEME.success, marginLeft: 8, fontSize: 14 },
+    vaultCard: { padding: 16 },
+    vaultItem: { marginBottom: 20 },
+    vaultLabel: { color: THEME.textSecondary, fontSize: 12, marginBottom: 8 },
+    vaultRow: { flexDirection: 'row', alignItems: 'center' },
+    vaultInput: { flex: 1, color: '#fff', borderBottomWidth: 1, borderBottomColor: THEME.cardBorder, paddingVertical: 4 },
+    vaultSave: { marginLeft: 12 },
+    modalClose: { alignSelf: 'flex-end', marginRight: 20, marginBottom: 10 },
+    agentInputCard: { flexDirection: 'row', alignItems: 'center', padding: 8 },
+    agentInput: { flex: 1, color: '#fff', paddingHorizontal: 12 },
+    runAgentBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center' },
+    agentStep: { padding: 12, marginBottom: 12 },
+    stepHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+    stepType: { fontSize: 10, fontWeight: 'bold' },
+    stepTs: { fontSize: 10, color: THEME.textSecondary },
+    stepText: { color: '#fff', fontSize: 14 },
+    stepImage: { width: '100%', aspectRatio: 1, borderRadius: 8, marginTop: 8 },
+    agentStep_goal: { borderColor: THEME.secondary },
+    agentStep_thinking: { opacity: 0.6 },
+    agentStep_thought: { fontStyle: 'italic' },
+    agentStep_tool_call: { borderColor: THEME.primary },
+    agentStep_observation: { borderColor: THEME.accent },
+    agentStep_done: { borderColor: THEME.success },
+    agentStep_error: { borderColor: THEME.error },
   });
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: NEBULA_THEME.background },
-  glow: { position: 'absolute', width: 300, height: 300, borderRadius: 150, opacity: 0.2 },
-  header: { paddingTop: 40, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: NEBULA_THEME.border },
-  headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 15 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', letterSpacing: 2, color: NEBULA_THEME.text },
-  modelBar: { paddingLeft: 15 },
-  modelChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)', marginRight: 10, borderWidth: 1, borderColor: 'transparent' },
-  modelChipActive: { backgroundColor: NEBULA_THEME.primary, borderColor: NEBULA_THEME.primary },
-  modelChipText: { fontSize: 12, color: NEBULA_THEME.textSecondary, marginLeft: 6 },
+  // END OF NEBULA STUDIO PRO CORE
   
-  messageRow: { flexDirection: 'row', marginBottom: 20, alignItems: 'flex-end' },
-  aiAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: NEBULA_THEME.primary, justifyContent: 'center', alignItems: 'center', marginRight: 8, marginBottom: 4 },
-  bubble: { maxWidth: '80%', padding: 12, borderRadius: 20 },
-  userBubble: { backgroundColor: NEBULA_THEME.primary, borderBottomRightRadius: 4 },
-  aiBubble: { backgroundColor: NEBULA_THEME.card, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: NEBULA_THEME.border },
-  messageText: { color: '#fff', lineHeight: 20 },
-  
-  thinkContainer: { backgroundColor: 'rgba(255,255,255,0.05)', padding: 10, borderRadius: 10, marginBottom: 10, borderLeftWidth: 2, borderLeftColor: NEBULA_THEME.primary },
-  thinkTitle: { color: NEBULA_THEME.textSecondary, fontSize: 11, marginBottom: 4, fontWeight: '600' },
-  thinkText: { color: NEBULA_THEME.textSecondary, fontSize: 11, fontStyle: 'italic' },
-
-  inputBar: { position: 'absolute', bottom: 20, left: 15, right: 15, height: 56, borderRadius: 28, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, overflow: 'hidden', borderWidth: 1, borderColor: NEBULA_THEME.border },
-  input: { flex: 1, color: '#fff', fontSize: 15, maxHeight: 100 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: NEBULA_THEME.primary, justifyContent: 'center', alignItems: 'center' },
-
-  tabContent: { flex: 1, padding: 20 },
-  uploadArea: { width: '100%', height: 300, borderRadius: 20, borderStyle: 'dashed', borderWidth: 2, borderColor: NEBULA_THEME.border, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.02)' },
-  uploadText: { color: NEBULA_THEME.primary, marginTop: 10, fontWeight: '600' },
-  actionBtn: { backgroundColor: NEBULA_THEME.primary, padding: 16, borderRadius: 15, alignItems: 'center', marginTop: 20 },
-  actionBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-
-  searchBox: { backgroundColor: NEBULA_THEME.card, padding: 15, borderRadius: 15, color: '#fff', marginBottom: 20, borderWidth: 1, borderColor: NEBULA_THEME.border },
-  searchResult: { backgroundColor: NEBULA_THEME.card, padding: 15, borderRadius: 15, marginBottom: 15, borderWidth: 1, borderColor: NEBULA_THEME.border },
-  resultTitle: { color: NEBULA_THEME.primary, fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
-  resultUrl: { color: NEBULA_THEME.accent, fontSize: 12, marginBottom: 8 },
-  resultSnippet: { color: NEBULA_THEME.textSecondary, fontSize: 13 },
-
-  card: { backgroundColor: NEBULA_THEME.card, padding: 15, borderRadius: 15, marginBottom: 20, borderWidth: 1, borderColor: NEBULA_THEME.border },
-  cardLabel: { color: NEBULA_THEME.text, fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
-  previewImg: { width: '100%', height: 250, borderRadius: 10, marginTop: 15 },
-  
-  storyCard: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.03)', padding: 12, borderRadius: 12, marginBottom: 10 },
-  storyIdx: { width: 24, height: 24, borderRadius: 12, backgroundColor: NEBULA_THEME.primary, textAlign: 'center', lineHeight: 24, color: '#fff', fontSize: 12, fontWeight: 'bold', marginRight: 12 },
-  storyTitle: { color: '#fff', fontWeight: '600', marginBottom: 4 },
-  storyDesc: { color: NEBULA_THEME.textSecondary, fontSize: 12, marginBottom: 4 },
-  storyVisual: { color: NEBULA_THEME.accent, fontSize: 11, fontWeight: 'bold' },
-
-  codeBlock: { backgroundColor: '#000', padding: 15, borderRadius: 10, marginTop: 20, maxHeight: 300 },
-  codeText: { color: '#0f0', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12 },
-  linkText: { color: NEBULA_THEME.secondary, marginTop: 10, fontSize: 12, textDecorationLine: 'underline' },
-
-  tabBar: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 85, flexDirection: 'row', paddingHorizontal: 10, borderTopWidth: 1, borderTopColor: NEBULA_THEME.border },
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  tabIconContainer: { padding: 8, borderRadius: 12, alignItems: 'center' },
-  tabActive: { backgroundColor: 'rgba(139, 92, 246, 0.1)' },
-  tabText: { fontSize: 10, color: NEBULA_THEME.textSecondary, marginTop: 4 },
-  tabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: NEBULA_THEME.primary, marginTop: 4 },
-
-  kLabel: { color: NEBULA_THEME.textSecondary, fontSize: 12, marginBottom: 6 },
-  kInput: { backgroundColor: '#000', padding: 12, borderRadius: 8, color: NEBULA_THEME.accent },
-  vNote: { textAlign: 'center', color: NEBULA_THEME.textSecondary, fontSize: 11, marginTop: 20 },
-
-  errorBanner: { backgroundColor: NEBULA_THEME.error, padding: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  errorText: { color: '#fff', fontSize: 12, flex: 1 },
-
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 30 },
-  modalContent: { padding: 30, borderRadius: 25, alignItems: 'center', overflow: 'hidden' },
-  modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
-  modalDesc: { color: NEBULA_THEME.textSecondary, textAlign: 'center', marginBottom: 25 },
-  
-  shimmerContainer: { height: 100, width: '100%', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 15, overflow: 'hidden', marginBottom: 15 },
-  shimmer: { width: '100%', height: '100%' },
-});
-// Quality documentation line 0001: NEBULA STUDIO PRO
-// Quality documentation line 0002: NEBULA STUDIO PRO
-// Quality documentation line 0003: NEBULA STUDIO PRO
-// Quality documentation line 0004: NEBULA STUDIO PRO
-// Quality documentation line 0005: NEBULA STUDIO PRO
-// Quality documentation line 0006: NEBULA STUDIO PRO
-// Quality documentation line 0007: NEBULA STUDIO PRO
-// Quality documentation line 0008: NEBULA STUDIO PRO
-// Quality documentation line 0009: NEBULA STUDIO PRO
-// Quality documentation line 0010: NEBULA STUDIO PRO
-// Quality documentation line 0011: NEBULA STUDIO PRO
-// Quality documentation line 0012: NEBULA STUDIO PRO
-// Quality documentation line 0013: NEBULA STUDIO PRO
-// Quality documentation line 0014: NEBULA STUDIO PRO
-// Quality documentation line 0015: NEBULA STUDIO PRO
-// Quality documentation line 0016: NEBULA STUDIO PRO
-// Quality documentation line 0017: NEBULA STUDIO PRO
-// Quality documentation line 0018: NEBULA STUDIO PRO
-// Quality documentation line 0019: NEBULA STUDIO PRO
-// Quality documentation line 0020: NEBULA STUDIO PRO
-// Quality documentation line 0021: NEBULA STUDIO PRO
-// Quality documentation line 0022: NEBULA STUDIO PRO
-// Quality documentation line 0023: NEBULA STUDIO PRO
-// Quality documentation line 0024: NEBULA STUDIO PRO
-// Quality documentation line 0025: NEBULA STUDIO PRO
-// Quality documentation line 0026: NEBULA STUDIO PRO
-// Quality documentation line 0027: NEBULA STUDIO PRO
-// Quality documentation line 0028: NEBULA STUDIO PRO
-// Quality documentation line 0029: NEBULA STUDIO PRO
-// Quality documentation line 0030: NEBULA STUDIO PRO
-// Quality documentation line 0031: NEBULA STUDIO PRO
-// Quality documentation line 0032: NEBULA STUDIO PRO
-// Quality documentation line 0033: NEBULA STUDIO PRO
-// Quality documentation line 0034: NEBULA STUDIO PRO
-// Quality documentation line 0035: NEBULA STUDIO PRO
-// Quality documentation line 0036: NEBULA STUDIO PRO
-// Quality documentation line 0037: NEBULA STUDIO PRO
-// Quality documentation line 0038: NEBULA STUDIO PRO
-// Quality documentation line 0039: NEBULA STUDIO PRO
-// Quality documentation line 0040: NEBULA STUDIO PRO
-// Quality documentation line 0041: NEBULA STUDIO PRO
-// Quality documentation line 0042: NEBULA STUDIO PRO
-// Quality documentation line 0043: NEBULA STUDIO PRO
-// Quality documentation line 0044: NEBULA STUDIO PRO
-// Quality documentation line 0045: NEBULA STUDIO PRO
-// Quality documentation line 0046: NEBULA STUDIO PRO
-// Quality documentation line 0047: NEBULA STUDIO PRO
-// Quality documentation line 0048: NEBULA STUDIO PRO
-// Quality documentation line 0049: NEBULA STUDIO PRO
-// Quality documentation line 0050: NEBULA STUDIO PRO
-// Quality documentation line 0051: NEBULA STUDIO PRO
-// Quality documentation line 0052: NEBULA STUDIO PRO
-// Quality documentation line 0053: NEBULA STUDIO PRO
-// Quality documentation line 0054: NEBULA STUDIO PRO
-// Quality documentation line 0055: NEBULA STUDIO PRO
-// Quality documentation line 0056: NEBULA STUDIO PRO
-// Quality documentation line 0057: NEBULA STUDIO PRO
-// Quality documentation line 0058: NEBULA STUDIO PRO
-// Quality documentation line 0059: NEBULA STUDIO PRO
-// Quality documentation line 0060: NEBULA STUDIO PRO
-// Quality documentation line 0061: NEBULA STUDIO PRO
-// Quality documentation line 0062: NEBULA STUDIO PRO
-// Quality documentation line 0063: NEBULA STUDIO PRO
-// Quality documentation line 0064: NEBULA STUDIO PRO
-// Quality documentation line 0065: NEBULA STUDIO PRO
-// Quality documentation line 0066: NEBULA STUDIO PRO
-// Quality documentation line 0067: NEBULA STUDIO PRO
-// Quality documentation line 0068: NEBULA STUDIO PRO
-// Quality documentation line 0069: NEBULA STUDIO PRO
-// Quality documentation line 0070: NEBULA STUDIO PRO
-// Quality documentation line 0071: NEBULA STUDIO PRO
-// Quality documentation line 0072: NEBULA STUDIO PRO
-// Quality documentation line 0073: NEBULA STUDIO PRO
-// Quality documentation line 0074: NEBULA STUDIO PRO
-// Quality documentation line 0075: NEBULA STUDIO PRO
-// Quality documentation line 0076: NEBULA STUDIO PRO
-// Quality documentation line 0077: NEBULA STUDIO PRO
-// Quality documentation line 0078: NEBULA STUDIO PRO
-// Quality documentation line 0079: NEBULA STUDIO PRO
-// Quality documentation line 0080: NEBULA STUDIO PRO
-// Quality documentation line 0081: NEBULA STUDIO PRO
-// Quality documentation line 0082: NEBULA STUDIO PRO
-// Quality documentation line 0083: NEBULA STUDIO PRO
-// Quality documentation line 0084: NEBULA STUDIO PRO
-// Quality documentation line 0085: NEBULA STUDIO PRO
-// Quality documentation line 0086: NEBULA STUDIO PRO
-// Quality documentation line 0087: NEBULA STUDIO PRO
-// Quality documentation line 0088: NEBULA STUDIO PRO
-// Quality documentation line 0089: NEBULA STUDIO PRO
-// Quality documentation line 0090: NEBULA STUDIO PRO
-// Quality documentation line 0091: NEBULA STUDIO PRO
-// Quality documentation line 0092: NEBULA STUDIO PRO
-// Quality documentation line 0093: NEBULA STUDIO PRO
-// Quality documentation line 0094: NEBULA STUDIO PRO
-// Quality documentation line 0095: NEBULA STUDIO PRO
-// Quality documentation line 0096: NEBULA STUDIO PRO
-// Quality documentation line 0097: NEBULA STUDIO PRO
-// Quality documentation line 0098: NEBULA STUDIO PRO
-// Quality documentation line 0099: NEBULA STUDIO PRO
-// Quality documentation line 0100: NEBULA STUDIO PRO
-// Quality documentation line 0101: NEBULA STUDIO PRO
-// Quality documentation line 0102: NEBULA STUDIO PRO
-// Quality documentation line 0103: NEBULA STUDIO PRO
-// Quality documentation line 0104: NEBULA STUDIO PRO
-// Quality documentation line 0105: NEBULA STUDIO PRO
-// Quality documentation line 0106: NEBULA STUDIO PRO
-// Quality documentation line 0107: NEBULA STUDIO PRO
-// Quality documentation line 0108: NEBULA STUDIO PRO
-// Quality documentation line 0109: NEBULA STUDIO PRO
-// Quality documentation line 0110: NEBULA STUDIO PRO
-// Quality documentation line 0111: NEBULA STUDIO PRO
-// Quality documentation line 0112: NEBULA STUDIO PRO
-// Quality documentation line 0113: NEBULA STUDIO PRO
-// Quality documentation line 0114: NEBULA STUDIO PRO
-// Quality documentation line 0115: NEBULA STUDIO PRO
-// Quality documentation line 0116: NEBULA STUDIO PRO
-// Quality documentation line 0117: NEBULA STUDIO PRO
-// Quality documentation line 0118: NEBULA STUDIO PRO
-// Quality documentation line 0119: NEBULA STUDIO PRO
-// Quality documentation line 0120: NEBULA STUDIO PRO
-// Quality documentation line 0121: NEBULA STUDIO PRO
-// Quality documentation line 0122: NEBULA STUDIO PRO
-// Quality documentation line 0123: NEBULA STUDIO PRO
-// Quality documentation line 0124: NEBULA STUDIO PRO
-// Quality documentation line 0125: NEBULA STUDIO PRO
-// Quality documentation line 0126: NEBULA STUDIO PRO
-// Quality documentation line 0127: NEBULA STUDIO PRO
-// Quality documentation line 0128: NEBULA STUDIO PRO
-// Quality documentation line 0129: NEBULA STUDIO PRO
-// Quality documentation line 0130: NEBULA STUDIO PRO
-// Quality documentation line 0131: NEBULA STUDIO PRO
-// Quality documentation line 0132: NEBULA STUDIO PRO
-// Quality documentation line 0133: NEBULA STUDIO PRO
-// Quality documentation line 0134: NEBULA STUDIO PRO
-// Quality documentation line 0135: NEBULA STUDIO PRO
-// Quality documentation line 0136: NEBULA STUDIO PRO
-// Quality documentation line 0137: NEBULA STUDIO PRO
-// Quality documentation line 0138: NEBULA STUDIO PRO
-// Quality documentation line 0139: NEBULA STUDIO PRO
-// Quality documentation line 0140: NEBULA STUDIO PRO
-// Quality documentation line 0141: NEBULA STUDIO PRO
-// Quality documentation line 0142: NEBULA STUDIO PRO
-// Quality documentation line 0143: NEBULA STUDIO PRO
-// Quality documentation line 0144: NEBULA STUDIO PRO
-// Quality documentation line 0145: NEBULA STUDIO PRO
-// Quality documentation line 0146: NEBULA STUDIO PRO
-// Quality documentation line 0147: NEBULA STUDIO PRO
-// Quality documentation line 0148: NEBULA STUDIO PRO
-// Quality documentation line 0149: NEBULA STUDIO PRO
-// Quality documentation line 0150: NEBULA STUDIO PRO
-// Quality documentation line 0151: NEBULA STUDIO PRO
-// Quality documentation line 0152: NEBULA STUDIO PRO
-// Quality documentation line 0153: NEBULA STUDIO PRO
-// Quality documentation line 0154: NEBULA STUDIO PRO
-// Quality documentation line 0155: NEBULA STUDIO PRO
-// Quality documentation line 0156: NEBULA STUDIO PRO
-// Quality documentation line 0157: NEBULA STUDIO PRO
-// Quality documentation line 0158: NEBULA STUDIO PRO
-// Quality documentation line 0159: NEBULA STUDIO PRO
-// Quality documentation line 0160: NEBULA STUDIO PRO
-// Quality documentation line 0161: NEBULA STUDIO PRO
-// Quality documentation line 0162: NEBULA STUDIO PRO
-// Quality documentation line 0163: NEBULA STUDIO PRO
-// Quality documentation line 0164: NEBULA STUDIO PRO
-// Quality documentation line 0165: NEBULA STUDIO PRO
-// Quality documentation line 0166: NEBULA STUDIO PRO
-// Quality documentation line 0167: NEBULA STUDIO PRO
-// Quality documentation line 0168: NEBULA STUDIO PRO
-// Quality documentation line 0169: NEBULA STUDIO PRO
-// Quality documentation line 0170: NEBULA STUDIO PRO
-// Quality documentation line 0171: NEBULA STUDIO PRO
-// Quality documentation line 0172: NEBULA STUDIO PRO
-// Quality documentation line 0173: NEBULA STUDIO PRO
-// Quality documentation line 0174: NEBULA STUDIO PRO
-// Quality documentation line 0175: NEBULA STUDIO PRO
-// Quality documentation line 0176: NEBULA STUDIO PRO
-// Quality documentation line 0177: NEBULA STUDIO PRO
-// Quality documentation line 0178: NEBULA STUDIO PRO
-// Quality documentation line 0179: NEBULA STUDIO PRO
-// Quality documentation line 0180: NEBULA STUDIO PRO
-// Quality documentation line 0181: NEBULA STUDIO PRO
-// Quality documentation line 0182: NEBULA STUDIO PRO
-// Quality documentation line 0183: NEBULA STUDIO PRO
-// Quality documentation line 0184: NEBULA STUDIO PRO
-// Quality documentation line 0185: NEBULA STUDIO PRO
-// Quality documentation line 0186: NEBULA STUDIO PRO
-// Quality documentation line 0187: NEBULA STUDIO PRO
-// Quality documentation line 0188: NEBULA STUDIO PRO
-// Quality documentation line 0189: NEBULA STUDIO PRO
-// Quality documentation line 0190: NEBULA STUDIO PRO
-// Quality documentation line 0191: NEBULA STUDIO PRO
-// Quality documentation line 0192: NEBULA STUDIO PRO
-// Quality documentation line 0193: NEBULA STUDIO PRO
-// Quality documentation line 0194: NEBULA STUDIO PRO
-// Quality documentation line 0195: NEBULA STUDIO PRO
-// Quality documentation line 0196: NEBULA STUDIO PRO
-// Quality documentation line 0197: NEBULA STUDIO PRO
-// Quality documentation line 0198: NEBULA STUDIO PRO
-// Quality documentation line 0199: NEBULA STUDIO PRO
-// Quality documentation line 0200: NEBULA STUDIO PRO
-// Quality documentation line 0201: NEBULA STUDIO PRO
-// Quality documentation line 0202: NEBULA STUDIO PRO
-// Quality documentation line 0203: NEBULA STUDIO PRO
-// Quality documentation line 0204: NEBULA STUDIO PRO
-// Quality documentation line 0205: NEBULA STUDIO PRO
-// Quality documentation line 0206: NEBULA STUDIO PRO
-// Quality documentation line 0207: NEBULA STUDIO PRO
-// Quality documentation line 0208: NEBULA STUDIO PRO
-// Quality documentation line 0209: NEBULA STUDIO PRO
-// Quality documentation line 0210: NEBULA STUDIO PRO
-// Quality documentation line 0211: NEBULA STUDIO PRO
-// Quality documentation line 0212: NEBULA STUDIO PRO
-// Quality documentation line 0213: NEBULA STUDIO PRO
-// Quality documentation line 0214: NEBULA STUDIO PRO
-// Quality documentation line 0215: NEBULA STUDIO PRO
-// Quality documentation line 0216: NEBULA STUDIO PRO
-// Quality documentation line 0217: NEBULA STUDIO PRO
-// Quality documentation line 0218: NEBULA STUDIO PRO
-// Quality documentation line 0219: NEBULA STUDIO PRO
-// Quality documentation line 0220: NEBULA STUDIO PRO
-// Quality documentation line 0221: NEBULA STUDIO PRO
-// Quality documentation line 0222: NEBULA STUDIO PRO
-// Quality documentation line 0223: NEBULA STUDIO PRO
-// Quality documentation line 0224: NEBULA STUDIO PRO
-// Quality documentation line 0225: NEBULA STUDIO PRO
-// Quality documentation line 0226: NEBULA STUDIO PRO
-// Quality documentation line 0227: NEBULA STUDIO PRO
-// Quality documentation line 0228: NEBULA STUDIO PRO
-// Quality documentation line 0229: NEBULA STUDIO PRO
-// Quality documentation line 0230: NEBULA STUDIO PRO
-// Quality documentation line 0231: NEBULA STUDIO PRO
-// Quality documentation line 0232: NEBULA STUDIO PRO
-// Quality documentation line 0233: NEBULA STUDIO PRO
-// Quality documentation line 0234: NEBULA STUDIO PRO
-// Quality documentation line 0235: NEBULA STUDIO PRO
-// Quality documentation line 0236: NEBULA STUDIO PRO
-// Quality documentation line 0237: NEBULA STUDIO PRO
-// Quality documentation line 0238: NEBULA STUDIO PRO
-// Quality documentation line 0239: NEBULA STUDIO PRO
-// Quality documentation line 0240: NEBULA STUDIO PRO
-// Quality documentation line 0241: NEBULA STUDIO PRO
-// Quality documentation line 0242: NEBULA STUDIO PRO
-// Quality documentation line 0243: NEBULA STUDIO PRO
-// Quality documentation line 0244: NEBULA STUDIO PRO
-// Quality documentation line 0245: NEBULA STUDIO PRO
-// Quality documentation line 0246: NEBULA STUDIO PRO
-// Quality documentation line 0247: NEBULA STUDIO PRO
-// Quality documentation line 0248: NEBULA STUDIO PRO
-// Quality documentation line 0249: NEBULA STUDIO PRO
-// Quality documentation line 0250: NEBULA STUDIO PRO
-// Quality documentation line 0251: NEBULA STUDIO PRO
-// Quality documentation line 0252: NEBULA STUDIO PRO
-// Quality documentation line 0253: NEBULA STUDIO PRO
-// Quality documentation line 0254: NEBULA STUDIO PRO
-// Quality documentation line 0255: NEBULA STUDIO PRO
-// Quality documentation line 0256: NEBULA STUDIO PRO
-// Quality documentation line 0257: NEBULA STUDIO PRO
-// Quality documentation line 0258: NEBULA STUDIO PRO
-// Quality documentation line 0259: NEBULA STUDIO PRO
-// Quality documentation line 0260: NEBULA STUDIO PRO
-// Quality documentation line 0261: NEBULA STUDIO PRO
-// Quality documentation line 0262: NEBULA STUDIO PRO
-// Quality documentation line 0263: NEBULA STUDIO PRO
-// Quality documentation line 0264: NEBULA STUDIO PRO
-// Quality documentation line 0265: NEBULA STUDIO PRO
-// Quality documentation line 0266: NEBULA STUDIO PRO
-// Quality documentation line 0267: NEBULA STUDIO PRO
-// Quality documentation line 0268: NEBULA STUDIO PRO
-// Quality documentation line 0269: NEBULA STUDIO PRO
-// Quality documentation line 0270: NEBULA STUDIO PRO
-// Quality documentation line 0271: NEBULA STUDIO PRO
-// Quality documentation line 0272: NEBULA STUDIO PRO
-// Quality documentation line 0273: NEBULA STUDIO PRO
-// Quality documentation line 0274: NEBULA STUDIO PRO
-// Quality documentation line 0275: NEBULA STUDIO PRO
-// Quality documentation line 0276: NEBULA STUDIO PRO
-// Quality documentation line 0277: NEBULA STUDIO PRO
-// Quality documentation line 0278: NEBULA STUDIO PRO
-// Quality documentation line 0279: NEBULA STUDIO PRO
-// Quality documentation line 0280: NEBULA STUDIO PRO
-// Quality documentation line 0281: NEBULA STUDIO PRO
-// Quality documentation line 0282: NEBULA STUDIO PRO
-// Quality documentation line 0283: NEBULA STUDIO PRO
-// Quality documentation line 0284: NEBULA STUDIO PRO
-// Quality documentation line 0285: NEBULA STUDIO PRO
-// Quality documentation line 0286: NEBULA STUDIO PRO
-// Quality documentation line 0287: NEBULA STUDIO PRO
-// Quality documentation line 0288: NEBULA STUDIO PRO
-// Quality documentation line 0289: NEBULA STUDIO PRO
-// Quality documentation line 0290: NEBULA STUDIO PRO
-// Quality documentation line 0291: NEBULA STUDIO PRO
-// Quality documentation line 0292: NEBULA STUDIO PRO
-// Quality documentation line 0293: NEBULA STUDIO PRO
-// Quality documentation line 0294: NEBULA STUDIO PRO
-// Quality documentation line 0295: NEBULA STUDIO PRO
-// Quality documentation line 0296: NEBULA STUDIO PRO
-// Quality documentation line 0297: NEBULA STUDIO PRO
-// Quality documentation line 0298: NEBULA STUDIO PRO
-// Quality documentation line 0299: NEBULA STUDIO PRO
-// Quality documentation line 0300: NEBULA STUDIO PRO
-// Quality documentation line 0301: NEBULA STUDIO PRO
-// Quality documentation line 0302: NEBULA STUDIO PRO
-// Quality documentation line 0303: NEBULA STUDIO PRO
-// Quality documentation line 0304: NEBULA STUDIO PRO
-// Quality documentation line 0305: NEBULA STUDIO PRO
-// Quality documentation line 0306: NEBULA STUDIO PRO
-// Quality documentation line 0307: NEBULA STUDIO PRO
-// Quality documentation line 0308: NEBULA STUDIO PRO
-// Quality documentation line 0309: NEBULA STUDIO PRO
-// Quality documentation line 0310: NEBULA STUDIO PRO
-// Quality documentation line 0311: NEBULA STUDIO PRO
-// Quality documentation line 0312: NEBULA STUDIO PRO
-// Quality documentation line 0313: NEBULA STUDIO PRO
-// Quality documentation line 0314: NEBULA STUDIO PRO
-// Quality documentation line 0315: NEBULA STUDIO PRO
-// Quality documentation line 0316: NEBULA STUDIO PRO
-// Quality documentation line 0317: NEBULA STUDIO PRO
-// Quality documentation line 0318: NEBULA STUDIO PRO
-// Quality documentation line 0319: NEBULA STUDIO PRO
-// Quality documentation line 0320: NEBULA STUDIO PRO
-// Quality documentation line 0321: NEBULA STUDIO PRO
-// Quality documentation line 0322: NEBULA STUDIO PRO
-// Quality documentation line 0323: NEBULA STUDIO PRO
-// Quality documentation line 0324: NEBULA STUDIO PRO
-// Quality documentation line 0325: NEBULA STUDIO PRO
-// Quality documentation line 0326: NEBULA STUDIO PRO
-// Quality documentation line 0327: NEBULA STUDIO PRO
-// Quality documentation line 0328: NEBULA STUDIO PRO
-// Quality documentation line 0329: NEBULA STUDIO PRO
-// Quality documentation line 0330: NEBULA STUDIO PRO
-// Quality documentation line 0331: NEBULA STUDIO PRO
-// Quality documentation line 0332: NEBULA STUDIO PRO
-// Quality documentation line 0333: NEBULA STUDIO PRO
-// Quality documentation line 0334: NEBULA STUDIO PRO
-// Quality documentation line 0335: NEBULA STUDIO PRO
-// Quality documentation line 0336: NEBULA STUDIO PRO
-// Quality documentation line 0337: NEBULA STUDIO PRO
-// Quality documentation line 0338: NEBULA STUDIO PRO
-// Quality documentation line 0339: NEBULA STUDIO PRO
-// Quality documentation line 0340: NEBULA STUDIO PRO
-// Quality documentation line 0341: NEBULA STUDIO PRO
-// Quality documentation line 0342: NEBULA STUDIO PRO
-// Quality documentation line 0343: NEBULA STUDIO PRO
-// Quality documentation line 0344: NEBULA STUDIO PRO
-// Quality documentation line 0345: NEBULA STUDIO PRO
-// Quality documentation line 0346: NEBULA STUDIO PRO
-// Quality documentation line 0347: NEBULA STUDIO PRO
-// Quality documentation line 0348: NEBULA STUDIO PRO
-// Quality documentation line 0349: NEBULA STUDIO PRO
-// Quality documentation line 0350: NEBULA STUDIO PRO
-// Quality documentation line 0351: NEBULA STUDIO PRO
-// Quality documentation line 0352: NEBULA STUDIO PRO
-// Quality documentation line 0353: NEBULA STUDIO PRO
-// Quality documentation line 0354: NEBULA STUDIO PRO
-// Quality documentation line 0355: NEBULA STUDIO PRO
-// Quality documentation line 0356: NEBULA STUDIO PRO
-// Quality documentation line 0357: NEBULA STUDIO PRO
-// Quality documentation line 0358: NEBULA STUDIO PRO
-// Quality documentation line 0359: NEBULA STUDIO PRO
-// Quality documentation line 0360: NEBULA STUDIO PRO
-// Quality documentation line 0361: NEBULA STUDIO PRO
-// Quality documentation line 0362: NEBULA STUDIO PRO
-// Quality documentation line 0363: NEBULA STUDIO PRO
-// Quality documentation line 0364: NEBULA STUDIO PRO
-// Quality documentation line 0365: NEBULA STUDIO PRO
-// Quality documentation line 0366: NEBULA STUDIO PRO
-// Quality documentation line 0367: NEBULA STUDIO PRO
-// Quality documentation line 0368: NEBULA STUDIO PRO
-// Quality documentation line 0369: NEBULA STUDIO PRO
-// Quality documentation line 0370: NEBULA STUDIO PRO
-// Quality documentation line 0371: NEBULA STUDIO PRO
-// Quality documentation line 0372: NEBULA STUDIO PRO
-// Quality documentation line 0373: NEBULA STUDIO PRO
-// Quality documentation line 0374: NEBULA STUDIO PRO
-// Quality documentation line 0375: NEBULA STUDIO PRO
-// Quality documentation line 0376: NEBULA STUDIO PRO
-// Quality documentation line 0377: NEBULA STUDIO PRO
-// Quality documentation line 0378: NEBULA STUDIO PRO
-// Quality documentation line 0379: NEBULA STUDIO PRO
-// Quality documentation line 0380: NEBULA STUDIO PRO
-// Quality documentation line 0381: NEBULA STUDIO PRO
-// Quality documentation line 0382: NEBULA STUDIO PRO
-// Quality documentation line 0383: NEBULA STUDIO PRO
-// Quality documentation line 0384: NEBULA STUDIO PRO
-// Quality documentation line 0385: NEBULA STUDIO PRO
-// Quality documentation line 0386: NEBULA STUDIO PRO
-// Quality documentation line 0387: NEBULA STUDIO PRO
-// Quality documentation line 0388: NEBULA STUDIO PRO
-// Quality documentation line 0389: NEBULA STUDIO PRO
-// Quality documentation line 0390: NEBULA STUDIO PRO
-// Quality documentation line 0391: NEBULA STUDIO PRO
-// Quality documentation line 0392: NEBULA STUDIO PRO
-// Quality documentation line 0393: NEBULA STUDIO PRO
-// Quality documentation line 0394: NEBULA STUDIO PRO
-// Quality documentation line 0395: NEBULA STUDIO PRO
-// Quality documentation line 0396: NEBULA STUDIO PRO
-// Quality documentation line 0397: NEBULA STUDIO PRO
-// Quality documentation line 0398: NEBULA STUDIO PRO
-// Quality documentation line 0399: NEBULA STUDIO PRO
-// Quality documentation line 0400: NEBULA STUDIO PRO
-// Quality documentation line 0401: NEBULA STUDIO PRO
-// Quality documentation line 0402: NEBULA STUDIO PRO
-// Quality documentation line 0403: NEBULA STUDIO PRO
-// Quality documentation line 0404: NEBULA STUDIO PRO
-// Quality documentation line 0405: NEBULA STUDIO PRO
-// Quality documentation line 0406: NEBULA STUDIO PRO
-// Quality documentation line 0407: NEBULA STUDIO PRO
-// Quality documentation line 0408: NEBULA STUDIO PRO
-// Quality documentation line 0409: NEBULA STUDIO PRO
-// Quality documentation line 0410: NEBULA STUDIO PRO
-// Quality documentation line 0411: NEBULA STUDIO PRO
-// Quality documentation line 0412: NEBULA STUDIO PRO
-// Quality documentation line 0413: NEBULA STUDIO PRO
-// Quality documentation line 0414: NEBULA STUDIO PRO
-// Quality documentation line 0415: NEBULA STUDIO PRO
-// Quality documentation line 0416: NEBULA STUDIO PRO
-// Quality documentation line 0417: NEBULA STUDIO PRO
-// Quality documentation line 0418: NEBULA STUDIO PRO
-// Quality documentation line 0419: NEBULA STUDIO PRO
-// Quality documentation line 0420: NEBULA STUDIO PRO
-// Quality documentation line 0421: NEBULA STUDIO PRO
-// Quality documentation line 0422: NEBULA STUDIO PRO
-// Quality documentation line 0423: NEBULA STUDIO PRO
-// Quality documentation line 0424: NEBULA STUDIO PRO
-// Quality documentation line 0425: NEBULA STUDIO PRO
-// Quality documentation line 0426: NEBULA STUDIO PRO
-// Quality documentation line 0427: NEBULA STUDIO PRO
-// Quality documentation line 0428: NEBULA STUDIO PRO
-// Quality documentation line 0429: NEBULA STUDIO PRO
-// Quality documentation line 0430: NEBULA STUDIO PRO
-// Quality documentation line 0431: NEBULA STUDIO PRO
-// Quality documentation line 0432: NEBULA STUDIO PRO
-// Quality documentation line 0433: NEBULA STUDIO PRO
-// Quality documentation line 0434: NEBULA STUDIO PRO
-// Quality documentation line 0435: NEBULA STUDIO PRO
-// Quality documentation line 0436: NEBULA STUDIO PRO
-// Quality documentation line 0437: NEBULA STUDIO PRO
-// Quality documentation line 0438: NEBULA STUDIO PRO
-// Quality documentation line 0439: NEBULA STUDIO PRO
-// Quality documentation line 0440: NEBULA STUDIO PRO
-// Quality documentation line 0441: NEBULA STUDIO PRO
-// Quality documentation line 0442: NEBULA STUDIO PRO
-// Quality documentation line 0443: NEBULA STUDIO PRO
-// Quality documentation line 0444: NEBULA STUDIO PRO
-// Quality documentation line 0445: NEBULA STUDIO PRO
-// Quality documentation line 0446: NEBULA STUDIO PRO
-// Quality documentation line 0447: NEBULA STUDIO PRO
-// Quality documentation line 0448: NEBULA STUDIO PRO
-// Quality documentation line 0449: NEBULA STUDIO PRO
-// Quality documentation line 0450: NEBULA STUDIO PRO
-// Quality documentation line 0451: NEBULA STUDIO PRO
-// Quality documentation line 0452: NEBULA STUDIO PRO
-// Quality documentation line 0453: NEBULA STUDIO PRO
-// Quality documentation line 0454: NEBULA STUDIO PRO
-// Quality documentation line 0455: NEBULA STUDIO PRO
-// Quality documentation line 0456: NEBULA STUDIO PRO
-// Quality documentation line 0457: NEBULA STUDIO PRO
-// Quality documentation line 0458: NEBULA STUDIO PRO
-// Quality documentation line 0459: NEBULA STUDIO PRO
-// Quality documentation line 0460: NEBULA STUDIO PRO
-// Quality documentation line 0461: NEBULA STUDIO PRO
-// Quality documentation line 0462: NEBULA STUDIO PRO
-// Quality documentation line 0463: NEBULA STUDIO PRO
-// Quality documentation line 0464: NEBULA STUDIO PRO
-// Quality documentation line 0465: NEBULA STUDIO PRO
-// Quality documentation line 0466: NEBULA STUDIO PRO
-// Quality documentation line 0467: NEBULA STUDIO PRO
-// Quality documentation line 0468: NEBULA STUDIO PRO
-// Quality documentation line 0469: NEBULA STUDIO PRO
-// Quality documentation line 0470: NEBULA STUDIO PRO
-// Quality documentation line 0471: NEBULA STUDIO PRO
-// Quality documentation line 0472: NEBULA STUDIO PRO
-// Quality documentation line 0473: NEBULA STUDIO PRO
-// Quality documentation line 0474: NEBULA STUDIO PRO
-// Quality documentation line 0475: NEBULA STUDIO PRO
-// Quality documentation line 0476: NEBULA STUDIO PRO
-// Quality documentation line 0477: NEBULA STUDIO PRO
-// Quality documentation line 0478: NEBULA STUDIO PRO
-// Quality documentation line 0479: NEBULA STUDIO PRO
-// Quality documentation line 0480: NEBULA STUDIO PRO
-// Quality documentation line 0481: NEBULA STUDIO PRO
-// Quality documentation line 0482: NEBULA STUDIO PRO
-// Quality documentation line 0483: NEBULA STUDIO PRO
-// Quality documentation line 0484: NEBULA STUDIO PRO
-// Quality documentation line 0485: NEBULA STUDIO PRO
-// Quality documentation line 0486: NEBULA STUDIO PRO
-// Quality documentation line 0487: NEBULA STUDIO PRO
-// Quality documentation line 0488: NEBULA STUDIO PRO
-// Quality documentation line 0489: NEBULA STUDIO PRO
-// Quality documentation line 0490: NEBULA STUDIO PRO
-// Quality documentation line 0491: NEBULA STUDIO PRO
-// Quality documentation line 0492: NEBULA STUDIO PRO
-// Quality documentation line 0493: NEBULA STUDIO PRO
-// Quality documentation line 0494: NEBULA STUDIO PRO
-// Quality documentation line 0495: NEBULA STUDIO PRO
-// Quality documentation line 0496: NEBULA STUDIO PRO
-// Quality documentation line 0497: NEBULA STUDIO PRO
-// Quality documentation line 0498: NEBULA STUDIO PRO
-// Quality documentation line 0499: NEBULA STUDIO PRO
-// Quality documentation line 0500: NEBULA STUDIO PRO
-// Quality documentation line 0501: NEBULA STUDIO PRO
-// Quality documentation line 0502: NEBULA STUDIO PRO
-// Quality documentation line 0503: NEBULA STUDIO PRO
-// Quality documentation line 0504: NEBULA STUDIO PRO
-// Quality documentation line 0505: NEBULA STUDIO PRO
-// Quality documentation line 0506: NEBULA STUDIO PRO
-// Quality documentation line 0507: NEBULA STUDIO PRO
-// Quality documentation line 0508: NEBULA STUDIO PRO
-// Quality documentation line 0509: NEBULA STUDIO PRO
-// Quality documentation line 0510: NEBULA STUDIO PRO
-// Quality documentation line 0511: NEBULA STUDIO PRO
-// Quality documentation line 0512: NEBULA STUDIO PRO
-// Quality documentation line 0513: NEBULA STUDIO PRO
-// Quality documentation line 0514: NEBULA STUDIO PRO
-// Quality documentation line 0515: NEBULA STUDIO PRO
-// Quality documentation line 0516: NEBULA STUDIO PRO
-// Quality documentation line 0517: NEBULA STUDIO PRO
-// Quality documentation line 0518: NEBULA STUDIO PRO
-// Quality documentation line 0519: NEBULA STUDIO PRO
-// Quality documentation line 0520: NEBULA STUDIO PRO
-// Quality documentation line 0521: NEBULA STUDIO PRO
-// Quality documentation line 0522: NEBULA STUDIO PRO
-// Quality documentation line 0523: NEBULA STUDIO PRO
-// Quality documentation line 0524: NEBULA STUDIO PRO
-// Quality documentation line 0525: NEBULA STUDIO PRO
-// Quality documentation line 0526: NEBULA STUDIO PRO
-// Quality documentation line 0527: NEBULA STUDIO PRO
-// Quality documentation line 0528: NEBULA STUDIO PRO
-// Quality documentation line 0529: NEBULA STUDIO PRO
-// Quality documentation line 0530: NEBULA STUDIO PRO
-// Quality documentation line 0531: NEBULA STUDIO PRO
-// Quality documentation line 0532: NEBULA STUDIO PRO
-// Quality documentation line 0533: NEBULA STUDIO PRO
-// Quality documentation line 0534: NEBULA STUDIO PRO
-// Quality documentation line 0535: NEBULA STUDIO PRO
-// Quality documentation line 0536: NEBULA STUDIO PRO
-// Quality documentation line 0537: NEBULA STUDIO PRO
-// Quality documentation line 0538: NEBULA STUDIO PRO
-// Quality documentation line 0539: NEBULA STUDIO PRO
-// Quality documentation line 0540: NEBULA STUDIO PRO
-// Quality documentation line 0541: NEBULA STUDIO PRO
-// Quality documentation line 0542: NEBULA STUDIO PRO
-// Quality documentation line 0543: NEBULA STUDIO PRO
-// Quality documentation line 0544: NEBULA STUDIO PRO
-// Quality documentation line 0545: NEBULA STUDIO PRO
-// Quality documentation line 0546: NEBULA STUDIO PRO
-// Quality documentation line 0547: NEBULA STUDIO PRO
-// Quality documentation line 0548: NEBULA STUDIO PRO
-// Quality documentation line 0549: NEBULA STUDIO PRO
-// Quality documentation line 0550: NEBULA STUDIO PRO
-// Quality documentation line 0551: NEBULA STUDIO PRO
-// Quality documentation line 0552: NEBULA STUDIO PRO
-// Quality documentation line 0553: NEBULA STUDIO PRO
-// Quality documentation line 0554: NEBULA STUDIO PRO
-// Quality documentation line 0555: NEBULA STUDIO PRO
-// Quality documentation line 0556: NEBULA STUDIO PRO
-// Quality documentation line 0557: NEBULA STUDIO PRO
-// Quality documentation line 0558: NEBULA STUDIO PRO
-// Quality documentation line 0559: NEBULA STUDIO PRO
-// Quality documentation line 0560: NEBULA STUDIO PRO
-// Quality documentation line 0561: NEBULA STUDIO PRO
-// Quality documentation line 0562: NEBULA STUDIO PRO
-// Quality documentation line 0563: NEBULA STUDIO PRO
-// Quality documentation line 0564: NEBULA STUDIO PRO
-// Quality documentation line 0565: NEBULA STUDIO PRO
-// Quality documentation line 0566: NEBULA STUDIO PRO
-// Quality documentation line 0567: NEBULA STUDIO PRO
-// Quality documentation line 0568: NEBULA STUDIO PRO
-// Quality documentation line 0569: NEBULA STUDIO PRO
-// Quality documentation line 0570: NEBULA STUDIO PRO
-// Quality documentation line 0571: NEBULA STUDIO PRO
-// Quality documentation line 0572: NEBULA STUDIO PRO
-// Quality documentation line 0573: NEBULA STUDIO PRO
-// Quality documentation line 0574: NEBULA STUDIO PRO
-// Quality documentation line 0575: NEBULA STUDIO PRO
-// Quality documentation line 0576: NEBULA STUDIO PRO
-// Quality documentation line 0577: NEBULA STUDIO PRO
-// Quality documentation line 0578: NEBULA STUDIO PRO
-// Quality documentation line 0579: NEBULA STUDIO PRO
-// Quality documentation line 0580: NEBULA STUDIO PRO
-// Quality documentation line 0581: NEBULA STUDIO PRO
-// Quality documentation line 0582: NEBULA STUDIO PRO
-// Quality documentation line 0583: NEBULA STUDIO PRO
-// Quality documentation line 0584: NEBULA STUDIO PRO
-// Quality documentation line 0585: NEBULA STUDIO PRO
-// Quality documentation line 0586: NEBULA STUDIO PRO
-// Quality documentation line 0587: NEBULA STUDIO PRO
-// Quality documentation line 0588: NEBULA STUDIO PRO
-// Quality documentation line 0589: NEBULA STUDIO PRO
-// Quality documentation line 0590: NEBULA STUDIO PRO
-// Quality documentation line 0591: NEBULA STUDIO PRO
-// Quality documentation line 0592: NEBULA STUDIO PRO
-// Quality documentation line 0593: NEBULA STUDIO PRO
-// Quality documentation line 0594: NEBULA STUDIO PRO
-// Quality documentation line 0595: NEBULA STUDIO PRO
-// Quality documentation line 0596: NEBULA STUDIO PRO
-// Quality documentation line 0597: NEBULA STUDIO PRO
-// Quality documentation line 0598: NEBULA STUDIO PRO
-// Quality documentation line 0599: NEBULA STUDIO PRO
-// Quality documentation line 0600: NEBULA STUDIO PRO
-// Quality documentation line 0601: NEBULA STUDIO PRO
-// Quality documentation line 0602: NEBULA STUDIO PRO
-// Quality documentation line 0603: NEBULA STUDIO PRO
-// Quality documentation line 0604: NEBULA STUDIO PRO
-// Quality documentation line 0605: NEBULA STUDIO PRO
-// Quality documentation line 0606: NEBULA STUDIO PRO
-// Quality documentation line 0607: NEBULA STUDIO PRO
-// Quality documentation line 0608: NEBULA STUDIO PRO
-// Quality documentation line 0609: NEBULA STUDIO PRO
-// Quality documentation line 0610: NEBULA STUDIO PRO
-// Quality documentation line 0611: NEBULA STUDIO PRO
-// Quality documentation line 0612: NEBULA STUDIO PRO
-// Quality documentation line 0613: NEBULA STUDIO PRO
-// Quality documentation line 0614: NEBULA STUDIO PRO
-// Quality documentation line 0615: NEBULA STUDIO PRO
-// Quality documentation line 0616: NEBULA STUDIO PRO
-// Quality documentation line 0617: NEBULA STUDIO PRO
-// Quality documentation line 0618: NEBULA STUDIO PRO
-// Quality documentation line 0619: NEBULA STUDIO PRO
-// Quality documentation line 0620: NEBULA STUDIO PRO
-// Quality documentation line 0621: NEBULA STUDIO PRO
-// Quality documentation line 0622: NEBULA STUDIO PRO
-// Quality documentation line 0623: NEBULA STUDIO PRO
-// Quality documentation line 0624: NEBULA STUDIO PRO
-// Quality documentation line 0625: NEBULA STUDIO PRO
-// Quality documentation line 0626: NEBULA STUDIO PRO
-// Quality documentation line 0627: NEBULA STUDIO PRO
-// Quality documentation line 0628: NEBULA STUDIO PRO
-// Quality documentation line 0629: NEBULA STUDIO PRO
-// Quality documentation line 0630: NEBULA STUDIO PRO
-// Quality documentation line 0631: NEBULA STUDIO PRO
-// Quality documentation line 0632: NEBULA STUDIO PRO
-// Quality documentation line 0633: NEBULA STUDIO PRO
-// Quality documentation line 0634: NEBULA STUDIO PRO
-// Quality documentation line 0635: NEBULA STUDIO PRO
-// Quality documentation line 0636: NEBULA STUDIO PRO
-// Quality documentation line 0637: NEBULA STUDIO PRO
-// Quality documentation line 0638: NEBULA STUDIO PRO
-// Quality documentation line 0639: NEBULA STUDIO PRO
-// Quality documentation line 0640: NEBULA STUDIO PRO
-// Quality documentation line 0641: NEBULA STUDIO PRO
-// Quality documentation line 0642: NEBULA STUDIO PRO
-// Quality documentation line 0643: NEBULA STUDIO PRO
-// Quality documentation line 0644: NEBULA STUDIO PRO
-// Quality documentation line 0645: NEBULA STUDIO PRO
-// Quality documentation line 0646: NEBULA STUDIO PRO
-// Quality documentation line 0647: NEBULA STUDIO PRO
-// Quality documentation line 0648: NEBULA STUDIO PRO
-// Quality documentation line 0649: NEBULA STUDIO PRO
-// Quality documentation line 0650: NEBULA STUDIO PRO
-// Quality documentation line 0651: NEBULA STUDIO PRO
-// Quality documentation line 0652: NEBULA STUDIO PRO
-// Quality documentation line 0653: NEBULA STUDIO PRO
-// Quality documentation line 0654: NEBULA STUDIO PRO
-// Quality documentation line 0655: NEBULA STUDIO PRO
-// Quality documentation line 0656: NEBULA STUDIO PRO
-// Quality documentation line 0657: NEBULA STUDIO PRO
-// Quality documentation line 0658: NEBULA STUDIO PRO
-// Quality documentation line 0659: NEBULA STUDIO PRO
-// Quality documentation line 0660: NEBULA STUDIO PRO
-// Quality documentation line 0661: NEBULA STUDIO PRO
-// Quality documentation line 0662: NEBULA STUDIO PRO
-// Quality documentation line 0663: NEBULA STUDIO PRO
-// Quality documentation line 0664: NEBULA STUDIO PRO
-// Quality documentation line 0665: NEBULA STUDIO PRO
-// Quality documentation line 0666: NEBULA STUDIO PRO
-// Quality documentation line 0667: NEBULA STUDIO PRO
-// Quality documentation line 0668: NEBULA STUDIO PRO
-// Quality documentation line 0669: NEBULA STUDIO PRO
-// Quality documentation line 0670: NEBULA STUDIO PRO
-// Quality documentation line 0671: NEBULA STUDIO PRO
-// Quality documentation line 0672: NEBULA STUDIO PRO
-// Quality documentation line 0673: NEBULA STUDIO PRO
-// Quality documentation line 0674: NEBULA STUDIO PRO
-// Quality documentation line 0675: NEBULA STUDIO PRO
-// Quality documentation line 0676: NEBULA STUDIO PRO
-// Quality documentation line 0677: NEBULA STUDIO PRO
-// Quality documentation line 0678: NEBULA STUDIO PRO
-// Quality documentation line 0679: NEBULA STUDIO PRO
-// Quality documentation line 0680: NEBULA STUDIO PRO
-// Quality documentation line 0681: NEBULA STUDIO PRO
-// Quality documentation line 0682: NEBULA STUDIO PRO
-// Quality documentation line 0683: NEBULA STUDIO PRO
-// Quality documentation line 0684: NEBULA STUDIO PRO
-// Quality documentation line 0685: NEBULA STUDIO PRO
-// Quality documentation line 0686: NEBULA STUDIO PRO
-// Quality documentation line 0687: NEBULA STUDIO PRO
-// Quality documentation line 0688: NEBULA STUDIO PRO
-// Quality documentation line 0689: NEBULA STUDIO PRO
-// Quality documentation line 0690: NEBULA STUDIO PRO
-// Quality documentation line 0691: NEBULA STUDIO PRO
-// Quality documentation line 0692: NEBULA STUDIO PRO
-// Quality documentation line 0693: NEBULA STUDIO PRO
-// Quality documentation line 0694: NEBULA STUDIO PRO
-// Quality documentation line 0695: NEBULA STUDIO PRO
-// Quality documentation line 0696: NEBULA STUDIO PRO
-// Quality documentation line 0697: NEBULA STUDIO PRO
-// Quality documentation line 0698: NEBULA STUDIO PRO
-// Quality documentation line 0699: NEBULA STUDIO PRO
-// Quality documentation line 0700: NEBULA STUDIO PRO
-// Quality documentation line 0701: NEBULA STUDIO PRO
-// Quality documentation line 0702: NEBULA STUDIO PRO
-// Quality documentation line 0703: NEBULA STUDIO PRO
-// Quality documentation line 0704: NEBULA STUDIO PRO
-// Quality documentation line 0705: NEBULA STUDIO PRO
-// Quality documentation line 0706: NEBULA STUDIO PRO
-// Quality documentation line 0707: NEBULA STUDIO PRO
-// Quality documentation line 0708: NEBULA STUDIO PRO
-// Quality documentation line 0709: NEBULA STUDIO PRO
-// Quality documentation line 0710: NEBULA STUDIO PRO
-// Quality documentation line 0711: NEBULA STUDIO PRO
-// Quality documentation line 0712: NEBULA STUDIO PRO
-// Quality documentation line 0713: NEBULA STUDIO PRO
-// Quality documentation line 0714: NEBULA STUDIO PRO
-// Quality documentation line 0715: NEBULA STUDIO PRO
-// Quality documentation line 0716: NEBULA STUDIO PRO
-// Quality documentation line 0717: NEBULA STUDIO PRO
-// Quality documentation line 0718: NEBULA STUDIO PRO
-// Quality documentation line 0719: NEBULA STUDIO PRO
-// Quality documentation line 0720: NEBULA STUDIO PRO
-// Quality documentation line 0721: NEBULA STUDIO PRO
-// Quality documentation line 0722: NEBULA STUDIO PRO
-// Quality documentation line 0723: NEBULA STUDIO PRO
-// Quality documentation line 0724: NEBULA STUDIO PRO
-// Quality documentation line 0725: NEBULA STUDIO PRO
-// Quality documentation line 0726: NEBULA STUDIO PRO
-// Quality documentation line 0727: NEBULA STUDIO PRO
-// Quality documentation line 0728: NEBULA STUDIO PRO
-// Quality documentation line 0729: NEBULA STUDIO PRO
-// Quality documentation line 0730: NEBULA STUDIO PRO
-// Quality documentation line 0731: NEBULA STUDIO PRO
-// Quality documentation line 0732: NEBULA STUDIO PRO
-// Quality documentation line 0733: NEBULA STUDIO PRO
-// Quality documentation line 0734: NEBULA STUDIO PRO
-// Quality documentation line 0735: NEBULA STUDIO PRO
-// Quality documentation line 0736: NEBULA STUDIO PRO
-// Quality documentation line 0737: NEBULA STUDIO PRO
-// Quality documentation line 0738: NEBULA STUDIO PRO
-// Quality documentation line 0739: NEBULA STUDIO PRO
-// Quality documentation line 0740: NEBULA STUDIO PRO
-// Quality documentation line 0741: NEBULA STUDIO PRO
-// Quality documentation line 0742: NEBULA STUDIO PRO
-// Quality documentation line 0743: NEBULA STUDIO PRO
-// Quality documentation line 0744: NEBULA STUDIO PRO
-// Quality documentation line 0745: NEBULA STUDIO PRO
-// Quality documentation line 0746: NEBULA STUDIO PRO
-// Quality documentation line 0747: NEBULA STUDIO PRO
-// Quality documentation line 0748: NEBULA STUDIO PRO
-// Quality documentation line 0749: NEBULA STUDIO PRO
-// Quality documentation line 0750: NEBULA STUDIO PRO
-// Quality documentation line 0751: NEBULA STUDIO PRO
-// Quality documentation line 0752: NEBULA STUDIO PRO
-// Quality documentation line 0753: NEBULA STUDIO PRO
-// Quality documentation line 0754: NEBULA STUDIO PRO
-// Quality documentation line 0755: NEBULA STUDIO PRO
-// Quality documentation line 0756: NEBULA STUDIO PRO
-// Quality documentation line 0757: NEBULA STUDIO PRO
-// Quality documentation line 0758: NEBULA STUDIO PRO
-// Quality documentation line 0759: NEBULA STUDIO PRO
-// Quality documentation line 0760: NEBULA STUDIO PRO
-// Quality documentation line 0761: NEBULA STUDIO PRO
-// Quality documentation line 0762: NEBULA STUDIO PRO
-// Quality documentation line 0763: NEBULA STUDIO PRO
-// Quality documentation line 0764: NEBULA STUDIO PRO
-// Quality documentation line 0765: NEBULA STUDIO PRO
-// Quality documentation line 0766: NEBULA STUDIO PRO
-// Quality documentation line 0767: NEBULA STUDIO PRO
-// Quality documentation line 0768: NEBULA STUDIO PRO
-// Quality documentation line 0769: NEBULA STUDIO PRO
-// Quality documentation line 0770: NEBULA STUDIO PRO
-// Quality documentation line 0771: NEBULA STUDIO PRO
-// Quality documentation line 0772: NEBULA STUDIO PRO
-// Quality documentation line 0773: NEBULA STUDIO PRO
-// Quality documentation line 0774: NEBULA STUDIO PRO
-// Quality documentation line 0775: NEBULA STUDIO PRO
-// Quality documentation line 0776: NEBULA STUDIO PRO
-// Quality documentation line 0777: NEBULA STUDIO PRO
-// Quality documentation line 0778: NEBULA STUDIO PRO
-// Quality documentation line 0779: NEBULA STUDIO PRO
-// Quality documentation line 0780: NEBULA STUDIO PRO
-// Quality documentation line 0781: NEBULA STUDIO PRO
-// Quality documentation line 0782: NEBULA STUDIO PRO
-// Quality documentation line 0783: NEBULA STUDIO PRO
-// Quality documentation line 0784: NEBULA STUDIO PRO
-// Quality documentation line 0785: NEBULA STUDIO PRO
-// Quality documentation line 0786: NEBULA STUDIO PRO
-// Quality documentation line 0787: NEBULA STUDIO PRO
-// Quality documentation line 0788: NEBULA STUDIO PRO
-// Quality documentation line 0789: NEBULA STUDIO PRO
-// Quality documentation line 0790: NEBULA STUDIO PRO
-// Quality documentation line 0791: NEBULA STUDIO PRO
-// Quality documentation line 0792: NEBULA STUDIO PRO
-// Quality documentation line 0793: NEBULA STUDIO PRO
-// Quality documentation line 0794: NEBULA STUDIO PRO
-// Quality documentation line 0795: NEBULA STUDIO PRO
-// Quality documentation line 0796: NEBULA STUDIO PRO
-// Quality documentation line 0797: NEBULA STUDIO PRO
-// Quality documentation line 0798: NEBULA STUDIO PRO
-// Quality documentation line 0799: NEBULA STUDIO PRO
-// Quality documentation line 0800: NEBULA STUDIO PRO
-// Quality documentation line 0801: NEBULA STUDIO PRO
-// Quality documentation line 0802: NEBULA STUDIO PRO
-// Quality documentation line 0803: NEBULA STUDIO PRO
-// Quality documentation line 0804: NEBULA STUDIO PRO
-// Quality documentation line 0805: NEBULA STUDIO PRO
-// Quality documentation line 0806: NEBULA STUDIO PRO
-// Quality documentation line 0807: NEBULA STUDIO PRO
-// Quality documentation line 0808: NEBULA STUDIO PRO
-// Quality documentation line 0809: NEBULA STUDIO PRO
-// Quality documentation line 0810: NEBULA STUDIO PRO
-// Quality documentation line 0811: NEBULA STUDIO PRO
-// Quality documentation line 0812: NEBULA STUDIO PRO
-// Quality documentation line 0813: NEBULA STUDIO PRO
-// Quality documentation line 0814: NEBULA STUDIO PRO
-// Quality documentation line 0815: NEBULA STUDIO PRO
-// Quality documentation line 0816: NEBULA STUDIO PRO
-// Quality documentation line 0817: NEBULA STUDIO PRO
-// Quality documentation line 0818: NEBULA STUDIO PRO
-// Quality documentation line 0819: NEBULA STUDIO PRO
-// Quality documentation line 0820: NEBULA STUDIO PRO
-// Quality documentation line 0821: NEBULA STUDIO PRO
-// Quality documentation line 0822: NEBULA STUDIO PRO
-// Quality documentation line 0823: NEBULA STUDIO PRO
-// Quality documentation line 0824: NEBULA STUDIO PRO
-// Quality documentation line 0825: NEBULA STUDIO PRO
-// Quality documentation line 0826: NEBULA STUDIO PRO
-// Quality documentation line 0827: NEBULA STUDIO PRO
-// Quality documentation line 0828: NEBULA STUDIO PRO
-// Quality documentation line 0829: NEBULA STUDIO PRO
-// Quality documentation line 0830: NEBULA STUDIO PRO
-// Quality documentation line 0831: NEBULA STUDIO PRO
-// Quality documentation line 0832: NEBULA STUDIO PRO
-// Quality documentation line 0833: NEBULA STUDIO PRO
-// Quality documentation line 0834: NEBULA STUDIO PRO
-// Quality documentation line 0835: NEBULA STUDIO PRO
-// Quality documentation line 0836: NEBULA STUDIO PRO
-// Quality documentation line 0837: NEBULA STUDIO PRO
-// Quality documentation line 0838: NEBULA STUDIO PRO
-// Quality documentation line 0839: NEBULA STUDIO PRO
-// Quality documentation line 0840: NEBULA STUDIO PRO
-// Quality documentation line 0841: NEBULA STUDIO PRO
-// Quality documentation line 0842: NEBULA STUDIO PRO
-// Quality documentation line 0843: NEBULA STUDIO PRO
-// Quality documentation line 0844: NEBULA STUDIO PRO
-// Quality documentation line 0845: NEBULA STUDIO PRO
-// Quality documentation line 0846: NEBULA STUDIO PRO
-// Quality documentation line 0847: NEBULA STUDIO PRO
-// Quality documentation line 0848: NEBULA STUDIO PRO
-// Quality documentation line 0849: NEBULA STUDIO PRO
-// Quality documentation line 0850: NEBULA STUDIO PRO
-// Quality documentation line 0851: NEBULA STUDIO PRO
-// Quality documentation line 0852: NEBULA STUDIO PRO
-// Quality documentation line 0853: NEBULA STUDIO PRO
-// Quality documentation line 0854: NEBULA STUDIO PRO
-// Quality documentation line 0855: NEBULA STUDIO PRO
-// Quality documentation line 0856: NEBULA STUDIO PRO
-// Quality documentation line 0857: NEBULA STUDIO PRO
-// Quality documentation line 0858: NEBULA STUDIO PRO
-// Quality documentation line 0859: NEBULA STUDIO PRO
-// Quality documentation line 0860: NEBULA STUDIO PRO
-// Quality documentation line 0861: NEBULA STUDIO PRO
-// Quality documentation line 0862: NEBULA STUDIO PRO
-// Quality documentation line 0863: NEBULA STUDIO PRO
-// Quality documentation line 0864: NEBULA STUDIO PRO
-// Quality documentation line 0865: NEBULA STUDIO PRO
-// Quality documentation line 0866: NEBULA STUDIO PRO
-// Quality documentation line 0867: NEBULA STUDIO PRO
-// Quality documentation line 0868: NEBULA STUDIO PRO
-// Quality documentation line 0869: NEBULA STUDIO PRO
-// Quality documentation line 0870: NEBULA STUDIO PRO
-// Quality documentation line 0871: NEBULA STUDIO PRO
-// Quality documentation line 0872: NEBULA STUDIO PRO
-// Quality documentation line 0873: NEBULA STUDIO PRO
-// Quality documentation line 0874: NEBULA STUDIO PRO
-// Quality documentation line 0875: NEBULA STUDIO PRO
-// Quality documentation line 0876: NEBULA STUDIO PRO
-// Quality documentation line 0877: NEBULA STUDIO PRO
-// Quality documentation line 0878: NEBULA STUDIO PRO
-// Quality documentation line 0879: NEBULA STUDIO PRO
-// Quality documentation line 0880: NEBULA STUDIO PRO
-// Quality documentation line 0881: NEBULA STUDIO PRO
-// Quality documentation line 0882: NEBULA STUDIO PRO
-// Quality documentation line 0883: NEBULA STUDIO PRO
-// Quality documentation line 0884: NEBULA STUDIO PRO
-// Quality documentation line 0885: NEBULA STUDIO PRO
-// Quality documentation line 0886: NEBULA STUDIO PRO
-// Quality documentation line 0887: NEBULA STUDIO PRO
-// Quality documentation line 0888: NEBULA STUDIO PRO
-// Quality documentation line 0889: NEBULA STUDIO PRO
-// Quality documentation line 0890: NEBULA STUDIO PRO
-// Quality documentation line 0891: NEBULA STUDIO PRO
-// Quality documentation line 0892: NEBULA STUDIO PRO
-// Quality documentation line 0893: NEBULA STUDIO PRO
-// Quality documentation line 0894: NEBULA STUDIO PRO
-// Quality documentation line 0895: NEBULA STUDIO PRO
-// Quality documentation line 0896: NEBULA STUDIO PRO
-// Quality documentation line 0897: NEBULA STUDIO PRO
-// Quality documentation line 0898: NEBULA STUDIO PRO
-// Quality documentation line 0899: NEBULA STUDIO PRO
-// Quality documentation line 0900: NEBULA STUDIO PRO
-// Quality documentation line 0901: NEBULA STUDIO PRO
-// Quality documentation line 0902: NEBULA STUDIO PRO
-// Quality documentation line 0903: NEBULA STUDIO PRO
-// Quality documentation line 0904: NEBULA STUDIO PRO
-// Quality documentation line 0905: NEBULA STUDIO PRO
-// Quality documentation line 0906: NEBULA STUDIO PRO
-// Quality documentation line 0907: NEBULA STUDIO PRO
-// Quality documentation line 0908: NEBULA STUDIO PRO
-// Quality documentation line 0909: NEBULA STUDIO PRO
-// Quality documentation line 0910: NEBULA STUDIO PRO
-// Quality documentation line 0911: NEBULA STUDIO PRO
-// Quality documentation line 0912: NEBULA STUDIO PRO
-// Quality documentation line 0913: NEBULA STUDIO PRO
-// Quality documentation line 0914: NEBULA STUDIO PRO
-// Quality documentation line 0915: NEBULA STUDIO PRO
-// Quality documentation line 0916: NEBULA STUDIO PRO
-// Quality documentation line 0917: NEBULA STUDIO PRO
-// Quality documentation line 0918: NEBULA STUDIO PRO
-// Quality documentation line 0919: NEBULA STUDIO PRO
-// Quality documentation line 0920: NEBULA STUDIO PRO
-// Quality documentation line 0921: NEBULA STUDIO PRO
-// Quality documentation line 0922: NEBULA STUDIO PRO
-// Quality documentation line 0923: NEBULA STUDIO PRO
-// Quality documentation line 0924: NEBULA STUDIO PRO
-// Quality documentation line 0925: NEBULA STUDIO PRO
-// Quality documentation line 0926: NEBULA STUDIO PRO
-// Quality documentation line 0927: NEBULA STUDIO PRO
-// Quality documentation line 0928: NEBULA STUDIO PRO
-// Quality documentation line 0929: NEBULA STUDIO PRO
-// Quality documentation line 0930: NEBULA STUDIO PRO
-// Quality documentation line 0931: NEBULA STUDIO PRO
-// Quality documentation line 0932: NEBULA STUDIO PRO
-// Quality documentation line 0933: NEBULA STUDIO PRO
-// Quality documentation line 0934: NEBULA STUDIO PRO
-// Quality documentation line 0935: NEBULA STUDIO PRO
-// Quality documentation line 0936: NEBULA STUDIO PRO
-// Quality documentation line 0937: NEBULA STUDIO PRO
-// Quality documentation line 0938: NEBULA STUDIO PRO
-// Quality documentation line 0939: NEBULA STUDIO PRO
-// Quality documentation line 0940: NEBULA STUDIO PRO
-// Quality documentation line 0941: NEBULA STUDIO PRO
-// Quality documentation line 0942: NEBULA STUDIO PRO
-// Quality documentation line 0943: NEBULA STUDIO PRO
-// Quality documentation line 0944: NEBULA STUDIO PRO
-// Quality documentation line 0945: NEBULA STUDIO PRO
-// Quality documentation line 0946: NEBULA STUDIO PRO
-// Quality documentation line 0947: NEBULA STUDIO PRO
-// Quality documentation line 0948: NEBULA STUDIO PRO
-// Quality documentation line 0949: NEBULA STUDIO PRO
-// Quality documentation line 0950: NEBULA STUDIO PRO
-// Quality documentation line 0951: NEBULA STUDIO PRO
-// Quality documentation line 0952: NEBULA STUDIO PRO
-// Quality documentation line 0953: NEBULA STUDIO PRO
-// Quality documentation line 0954: NEBULA STUDIO PRO
-// Quality documentation line 0955: NEBULA STUDIO PRO
-// Quality documentation line 0956: NEBULA STUDIO PRO
-// Quality documentation line 0957: NEBULA STUDIO PRO
-// Quality documentation line 0958: NEBULA STUDIO PRO
-// Quality documentation line 0959: NEBULA STUDIO PRO
-// Quality documentation line 0960: NEBULA STUDIO PRO
-// Quality documentation line 0961: NEBULA STUDIO PRO
-// Quality documentation line 0962: NEBULA STUDIO PRO
-// Quality documentation line 0963: NEBULA STUDIO PRO
-// Quality documentation line 0964: NEBULA STUDIO PRO
-// Quality documentation line 0965: NEBULA STUDIO PRO
-// Quality documentation line 0966: NEBULA STUDIO PRO
-// Quality documentation line 0967: NEBULA STUDIO PRO
-// Quality documentation line 0968: NEBULA STUDIO PRO
-// Quality documentation line 0969: NEBULA STUDIO PRO
-// Quality documentation line 0970: NEBULA STUDIO PRO
-// Quality documentation line 0971: NEBULA STUDIO PRO
-// Quality documentation line 0972: NEBULA STUDIO PRO
-// Quality documentation line 0973: NEBULA STUDIO PRO
-// Quality documentation line 0974: NEBULA STUDIO PRO
-// Quality documentation line 0975: NEBULA STUDIO PRO
-// Quality documentation line 0976: NEBULA STUDIO PRO
-// Quality documentation line 0977: NEBULA STUDIO PRO
-// Quality documentation line 0978: NEBULA STUDIO PRO
-// Quality documentation line 0979: NEBULA STUDIO PRO
-// Quality documentation line 0980: NEBULA STUDIO PRO
-// Quality documentation line 0981: NEBULA STUDIO PRO
-// Quality documentation line 0982: NEBULA STUDIO PRO
-// Quality documentation line 0983: NEBULA STUDIO PRO
-// Quality documentation line 0984: NEBULA STUDIO PRO
-// Quality documentation line 0985: NEBULA STUDIO PRO
-// Quality documentation line 0986: NEBULA STUDIO PRO
-// Quality documentation line 0987: NEBULA STUDIO PRO
-// Quality documentation line 0988: NEBULA STUDIO PRO
-// Quality documentation line 0989: NEBULA STUDIO PRO
-// Quality documentation line 0990: NEBULA STUDIO PRO
-// Quality documentation line 0991: NEBULA STUDIO PRO
-// Quality documentation line 0992: NEBULA STUDIO PRO
-// Quality documentation line 0993: NEBULA STUDIO PRO
-// Quality documentation line 0994: NEBULA STUDIO PRO
-// Quality documentation line 0995: NEBULA STUDIO PRO
-// Quality documentation line 0996: NEBULA STUDIO PRO
-// Quality documentation line 0997: NEBULA STUDIO PRO
-// Quality documentation line 0998: NEBULA STUDIO PRO
-// Quality documentation line 0999: NEBULA STUDIO PRO
-// Quality documentation line 1000: NEBULA STUDIO PRO
-// Quality documentation line 1001: NEBULA STUDIO PRO
-// Quality documentation line 1002: NEBULA STUDIO PRO
-// Quality documentation line 1003: NEBULA STUDIO PRO
-// Quality documentation line 1004: NEBULA STUDIO PRO
-// Quality documentation line 1005: NEBULA STUDIO PRO
-// Quality documentation line 1006: NEBULA STUDIO PRO
-// Quality documentation line 1007: NEBULA STUDIO PRO
-// Quality documentation line 1008: NEBULA STUDIO PRO
-// Quality documentation line 1009: NEBULA STUDIO PRO
-// Quality documentation line 1010: NEBULA STUDIO PRO
-// Quality documentation line 1011: NEBULA STUDIO PRO
-// Quality documentation line 1012: NEBULA STUDIO PRO
-// Quality documentation line 1013: NEBULA STUDIO PRO
-// Quality documentation line 1014: NEBULA STUDIO PRO
-// Quality documentation line 1015: NEBULA STUDIO PRO
-// Quality documentation line 1016: NEBULA STUDIO PRO
-// Quality documentation line 1017: NEBULA STUDIO PRO
-// Quality documentation line 1018: NEBULA STUDIO PRO
-// Quality documentation line 1019: NEBULA STUDIO PRO
-// Quality documentation line 1020: NEBULA STUDIO PRO
-// Quality documentation line 1021: NEBULA STUDIO PRO
-// Quality documentation line 1022: NEBULA STUDIO PRO
-// Quality documentation line 1023: NEBULA STUDIO PRO
-// Quality documentation line 1024: NEBULA STUDIO PRO
-// Quality documentation line 1025: NEBULA STUDIO PRO
-// Quality documentation line 1026: NEBULA STUDIO PRO
-// Quality documentation line 1027: NEBULA STUDIO PRO
-// Quality documentation line 1028: NEBULA STUDIO PRO
-// Quality documentation line 1029: NEBULA STUDIO PRO
-// Quality documentation line 1030: NEBULA STUDIO PRO
-// Quality documentation line 1031: NEBULA STUDIO PRO
-// Quality documentation line 1032: NEBULA STUDIO PRO
-// Quality documentation line 1033: NEBULA STUDIO PRO
-// Quality documentation line 1034: NEBULA STUDIO PRO
-// Quality documentation line 1035: NEBULA STUDIO PRO
-// Quality documentation line 1036: NEBULA STUDIO PRO
-// Quality documentation line 1037: NEBULA STUDIO PRO
-// Quality documentation line 1038: NEBULA STUDIO PRO
-// Quality documentation line 1039: NEBULA STUDIO PRO
-// Quality documentation line 1040: NEBULA STUDIO PRO
-// Quality documentation line 1041: NEBULA STUDIO PRO
-// Quality documentation line 1042: NEBULA STUDIO PRO
-// Quality documentation line 1043: NEBULA STUDIO PRO
-// Quality documentation line 1044: NEBULA STUDIO PRO
-// Quality documentation line 1045: NEBULA STUDIO PRO
-// Quality documentation line 1046: NEBULA STUDIO PRO
-// Quality documentation line 1047: NEBULA STUDIO PRO
-// Quality documentation line 1048: NEBULA STUDIO PRO
-// Quality documentation line 1049: NEBULA STUDIO PRO
-// Quality documentation line 1050: NEBULA STUDIO PRO
-// Quality documentation line 1051: NEBULA STUDIO PRO
-// Quality documentation line 1052: NEBULA STUDIO PRO
-// Quality documentation line 1053: NEBULA STUDIO PRO
-// Quality documentation line 1054: NEBULA STUDIO PRO
-// Quality documentation line 1055: NEBULA STUDIO PRO
-// Quality documentation line 1056: NEBULA STUDIO PRO
-// Quality documentation line 1057: NEBULA STUDIO PRO
-// Quality documentation line 1058: NEBULA STUDIO PRO
-// Quality documentation line 1059: NEBULA STUDIO PRO
-// Quality documentation line 1060: NEBULA STUDIO PRO
-// Quality documentation line 1061: NEBULA STUDIO PRO
-// Quality documentation line 1062: NEBULA STUDIO PRO
-// Quality documentation line 1063: NEBULA STUDIO PRO
-// Quality documentation line 1064: NEBULA STUDIO PRO
-// Quality documentation line 1065: NEBULA STUDIO PRO
-// Quality documentation line 1066: NEBULA STUDIO PRO
-// Quality documentation line 1067: NEBULA STUDIO PRO
-// Quality documentation line 1068: NEBULA STUDIO PRO
-// Quality documentation line 1069: NEBULA STUDIO PRO
-// Quality documentation line 1070: NEBULA STUDIO PRO
-// Quality documentation line 1071: NEBULA STUDIO PRO
-// Quality documentation line 1072: NEBULA STUDIO PRO
-// Quality documentation line 1073: NEBULA STUDIO PRO
-// Quality documentation line 1074: NEBULA STUDIO PRO
-// Quality documentation line 1075: NEBULA STUDIO PRO
-// Quality documentation line 1076: NEBULA STUDIO PRO
-// Quality documentation line 1077: NEBULA STUDIO PRO
-// Quality documentation line 1078: NEBULA STUDIO PRO
-// Quality documentation line 1079: NEBULA STUDIO PRO
-// Quality documentation line 1080: NEBULA STUDIO PRO
-// Quality documentation line 1081: NEBULA STUDIO PRO
-// Quality documentation line 1082: NEBULA STUDIO PRO
-// Quality documentation line 1083: NEBULA STUDIO PRO
-// Quality documentation line 1084: NEBULA STUDIO PRO
-// Quality documentation line 1085: NEBULA STUDIO PRO
-// Quality documentation line 1086: NEBULA STUDIO PRO
-// Quality documentation line 1087: NEBULA STUDIO PRO
-// Quality documentation line 1088: NEBULA STUDIO PRO
-// Quality documentation line 1089: NEBULA STUDIO PRO
-// Quality documentation line 1090: NEBULA STUDIO PRO
-// Quality documentation line 1091: NEBULA STUDIO PRO
-// Quality documentation line 1092: NEBULA STUDIO PRO
-// Quality documentation line 1093: NEBULA STUDIO PRO
-// Quality documentation line 1094: NEBULA STUDIO PRO
-// Quality documentation line 1095: NEBULA STUDIO PRO
-// Quality documentation line 1096: NEBULA STUDIO PRO
-// Quality documentation line 1097: NEBULA STUDIO PRO
-// Quality documentation line 1098: NEBULA STUDIO PRO
-// Quality documentation line 1099: NEBULA STUDIO PRO
-// Quality documentation line 1100: NEBULA STUDIO PRO
-// Quality documentation line 1101: NEBULA STUDIO PRO
-// Quality documentation line 1102: NEBULA STUDIO PRO
-// Quality documentation line 1103: NEBULA STUDIO PRO
-// Quality documentation line 1104: NEBULA STUDIO PRO
-// Quality documentation line 1105: NEBULA STUDIO PRO
-// Quality documentation line 1106: NEBULA STUDIO PRO
-// Quality documentation line 1107: NEBULA STUDIO PRO
-// Quality documentation line 1108: NEBULA STUDIO PRO
-// Quality documentation line 1109: NEBULA STUDIO PRO
-// Quality documentation line 1110: NEBULA STUDIO PRO
-// Quality documentation line 1111: NEBULA STUDIO PRO
-// Quality documentation line 1112: NEBULA STUDIO PRO
-// Quality documentation line 1113: NEBULA STUDIO PRO
-// Quality documentation line 1114: NEBULA STUDIO PRO
-// Quality documentation line 1115: NEBULA STUDIO PRO
-// Quality documentation line 1116: NEBULA STUDIO PRO
-// Quality documentation line 1117: NEBULA STUDIO PRO
-// Quality documentation line 1118: NEBULA STUDIO PRO
-// Quality documentation line 1119: NEBULA STUDIO PRO
-// Quality documentation line 1120: NEBULA STUDIO PRO
-// Quality documentation line 1121: NEBULA STUDIO PRO
-// Quality documentation line 1122: NEBULA STUDIO PRO
-// Quality documentation line 1123: NEBULA STUDIO PRO
-// Quality documentation line 1124: NEBULA STUDIO PRO
-// Quality documentation line 1125: NEBULA STUDIO PRO
-// Quality documentation line 1126: NEBULA STUDIO PRO
-// Quality documentation line 1127: NEBULA STUDIO PRO
-// Quality documentation line 1128: NEBULA STUDIO PRO
-// Quality documentation line 1129: NEBULA STUDIO PRO
-// Quality documentation line 1130: NEBULA STUDIO PRO
-// Quality documentation line 1131: NEBULA STUDIO PRO
-// Quality documentation line 1132: NEBULA STUDIO PRO
-// Quality documentation line 1133: NEBULA STUDIO PRO
-// Quality documentation line 1134: NEBULA STUDIO PRO
-// Quality documentation line 1135: NEBULA STUDIO PRO
-// Quality documentation line 1136: NEBULA STUDIO PRO
-// Quality documentation line 1137: NEBULA STUDIO PRO
-// Quality documentation line 1138: NEBULA STUDIO PRO
-// Quality documentation line 1139: NEBULA STUDIO PRO
-// Quality documentation line 1140: NEBULA STUDIO PRO
-// Quality documentation line 1141: NEBULA STUDIO PRO
-// Quality documentation line 1142: NEBULA STUDIO PRO
-// Quality documentation line 1143: NEBULA STUDIO PRO
-// Quality documentation line 1144: NEBULA STUDIO PRO
-// Quality documentation line 1145: NEBULA STUDIO PRO
-// Quality documentation line 1146: NEBULA STUDIO PRO
-// Quality documentation line 1147: NEBULA STUDIO PRO
-// Quality documentation line 1148: NEBULA STUDIO PRO
-// Quality documentation line 1149: NEBULA STUDIO PRO
-// Quality documentation line 1150: NEBULA STUDIO PRO
-// Quality documentation line 1151: NEBULA STUDIO PRO
-// Quality documentation line 1152: NEBULA STUDIO PRO
-// Quality documentation line 1153: NEBULA STUDIO PRO
-// Quality documentation line 1154: NEBULA STUDIO PRO
-// Quality documentation line 1155: NEBULA STUDIO PRO
-// Quality documentation line 1156: NEBULA STUDIO PRO
-// Quality documentation line 1157: NEBULA STUDIO PRO
-// Quality documentation line 1158: NEBULA STUDIO PRO
-// Quality documentation line 1159: NEBULA STUDIO PRO
-// Quality documentation line 1160: NEBULA STUDIO PRO
-// Quality documentation line 1161: NEBULA STUDIO PRO
-// Quality documentation line 1162: NEBULA STUDIO PRO
-// Quality documentation line 1163: NEBULA STUDIO PRO
-// Quality documentation line 1164: NEBULA STUDIO PRO
-// Quality documentation line 1165: NEBULA STUDIO PRO
-// Quality documentation line 1166: NEBULA STUDIO PRO
-// Quality documentation line 1167: NEBULA STUDIO PRO
-// Quality documentation line 1168: NEBULA STUDIO PRO
-// Quality documentation line 1169: NEBULA STUDIO PRO
-// Quality documentation line 1170: NEBULA STUDIO PRO
-// Quality documentation line 1171: NEBULA STUDIO PRO
-// Quality documentation line 1172: NEBULA STUDIO PRO
-// Quality documentation line 1173: NEBULA STUDIO PRO
-// Quality documentation line 1174: NEBULA STUDIO PRO
-// Quality documentation line 1175: NEBULA STUDIO PRO
-// Quality documentation line 1176: NEBULA STUDIO PRO
-// Quality documentation line 1177: NEBULA STUDIO PRO
-// Quality documentation line 1178: NEBULA STUDIO PRO
-// Quality documentation line 1179: NEBULA STUDIO PRO
-// Quality documentation line 1180: NEBULA STUDIO PRO
-// Quality documentation line 1181: NEBULA STUDIO PRO
-// Quality documentation line 1182: NEBULA STUDIO PRO
-// Quality documentation line 1183: NEBULA STUDIO PRO
-// Quality documentation line 1184: NEBULA STUDIO PRO
-// Quality documentation line 1185: NEBULA STUDIO PRO
-// Quality documentation line 1186: NEBULA STUDIO PRO
-// Quality documentation line 1187: NEBULA STUDIO PRO
-// Quality documentation line 1188: NEBULA STUDIO PRO
-// Quality documentation line 1189: NEBULA STUDIO PRO
-// Quality documentation line 1190: NEBULA STUDIO PRO
-// Quality documentation line 1191: NEBULA STUDIO PRO
-// Quality documentation line 1192: NEBULA STUDIO PRO
-// Quality documentation line 1193: NEBULA STUDIO PRO
-// Quality documentation line 1194: NEBULA STUDIO PRO
-// Quality documentation line 1195: NEBULA STUDIO PRO
-// Quality documentation line 1196: NEBULA STUDIO PRO
-// Quality documentation line 1197: NEBULA STUDIO PRO
-// Quality documentation line 1198: NEBULA STUDIO PRO
-// Quality documentation line 1199: NEBULA STUDIO PRO
-// Quality documentation line 1200: NEBULA STUDIO PRO
-// Quality documentation line 1201: NEBULA STUDIO PRO
-// Quality documentation line 1202: NEBULA STUDIO PRO
-// Quality documentation line 1203: NEBULA STUDIO PRO
-// Quality documentation line 1204: NEBULA STUDIO PRO
-// Quality documentation line 1205: NEBULA STUDIO PRO
-// Quality documentation line 1206: NEBULA STUDIO PRO
-// Quality documentation line 1207: NEBULA STUDIO PRO
-// Quality documentation line 1208: NEBULA STUDIO PRO
-// Quality documentation line 1209: NEBULA STUDIO PRO
-// Quality documentation line 1210: NEBULA STUDIO PRO
-// Quality documentation line 1211: NEBULA STUDIO PRO
-// Quality documentation line 1212: NEBULA STUDIO PRO
-// Quality documentation line 1213: NEBULA STUDIO PRO
-// Quality documentation line 1214: NEBULA STUDIO PRO
-// Quality documentation line 1215: NEBULA STUDIO PRO
-// Quality documentation line 1216: NEBULA STUDIO PRO
-// Quality documentation line 1217: NEBULA STUDIO PRO
-// Quality documentation line 1218: NEBULA STUDIO PRO
-// Quality documentation line 1219: NEBULA STUDIO PRO
-// Quality documentation line 1220: NEBULA STUDIO PRO
-// Quality documentation line 1221: NEBULA STUDIO PRO
-// Quality documentation line 1222: NEBULA STUDIO PRO
-// Quality documentation line 1223: NEBULA STUDIO PRO
-// Quality documentation line 1224: NEBULA STUDIO PRO
-// Quality documentation line 1225: NEBULA STUDIO PRO
-// Quality documentation line 1226: NEBULA STUDIO PRO
-// Quality documentation line 1227: NEBULA STUDIO PRO
-// Quality documentation line 1228: NEBULA STUDIO PRO
-// Quality documentation line 1229: NEBULA STUDIO PRO
-// Quality documentation line 1230: NEBULA STUDIO PRO
-// Quality documentation line 1231: NEBULA STUDIO PRO
-// Quality documentation line 1232: NEBULA STUDIO PRO
-// Quality documentation line 1233: NEBULA STUDIO PRO
-// Quality documentation line 1234: NEBULA STUDIO PRO
-// Quality documentation line 1235: NEBULA STUDIO PRO
-// Quality documentation line 1236: NEBULA STUDIO PRO
-// Quality documentation line 1237: NEBULA STUDIO PRO
-// Quality documentation line 1238: NEBULA STUDIO PRO
-// Quality documentation line 1239: NEBULA STUDIO PRO
-// Quality documentation line 1240: NEBULA STUDIO PRO
-// Quality documentation line 1241: NEBULA STUDIO PRO
-// Quality documentation line 1242: NEBULA STUDIO PRO
-// Quality documentation line 1243: NEBULA STUDIO PRO
-// Quality documentation line 1244: NEBULA STUDIO PRO
-// Quality documentation line 1245: NEBULA STUDIO PRO
-// Quality documentation line 1246: NEBULA STUDIO PRO
-// Quality documentation line 1247: NEBULA STUDIO PRO
-// Quality documentation line 1248: NEBULA STUDIO PRO
-// Quality documentation line 1249: NEBULA STUDIO PRO
-// Quality documentation line 1250: NEBULA STUDIO PRO
-// Quality documentation line 1251: NEBULA STUDIO PRO
-// Quality documentation line 1252: NEBULA STUDIO PRO
-// Quality documentation line 1253: NEBULA STUDIO PRO
-// Quality documentation line 1254: NEBULA STUDIO PRO
-// Quality documentation line 1255: NEBULA STUDIO PRO
-// Quality documentation line 1256: NEBULA STUDIO PRO
-// Quality documentation line 1257: NEBULA STUDIO PRO
-// Quality documentation line 1258: NEBULA STUDIO PRO
-// Quality documentation line 1259: NEBULA STUDIO PRO
-// Quality documentation line 1260: NEBULA STUDIO PRO
-// Quality documentation line 1261: NEBULA STUDIO PRO
-// Quality documentation line 1262: NEBULA STUDIO PRO
-// Quality documentation line 1263: NEBULA STUDIO PRO
-// Quality documentation line 1264: NEBULA STUDIO PRO
-// Quality documentation line 1265: NEBULA STUDIO PRO
-// Quality documentation line 1266: NEBULA STUDIO PRO
-// Quality documentation line 1267: NEBULA STUDIO PRO
-// Quality documentation line 1268: NEBULA STUDIO PRO
-// Quality documentation line 1269: NEBULA STUDIO PRO
-// Quality documentation line 1270: NEBULA STUDIO PRO
-// Quality documentation line 1271: NEBULA STUDIO PRO
-// Quality documentation line 1272: NEBULA STUDIO PRO
-// Quality documentation line 1273: NEBULA STUDIO PRO
-// Quality documentation line 1274: NEBULA STUDIO PRO
-// Quality documentation line 1275: NEBULA STUDIO PRO
-// Quality documentation line 1276: NEBULA STUDIO PRO
-// Quality documentation line 1277: NEBULA STUDIO PRO
-// Quality documentation line 1278: NEBULA STUDIO PRO
-// Quality documentation line 1279: NEBULA STUDIO PRO
-// Quality documentation line 1280: NEBULA STUDIO PRO
-// Quality documentation line 1281: NEBULA STUDIO PRO
-// Quality documentation line 1282: NEBULA STUDIO PRO
-// Quality documentation line 1283: NEBULA STUDIO PRO
-// Quality documentation line 1284: NEBULA STUDIO PRO
-// Quality documentation line 1285: NEBULA STUDIO PRO
-// Quality documentation line 1286: NEBULA STUDIO PRO
-// Quality documentation line 1287: NEBULA STUDIO PRO
-// Quality documentation line 1288: NEBULA STUDIO PRO
-// Quality documentation line 1289: NEBULA STUDIO PRO
-// Quality documentation line 1290: NEBULA STUDIO PRO
-// Quality documentation line 1291: NEBULA STUDIO PRO
-// Quality documentation line 1292: NEBULA STUDIO PRO
-// Quality documentation line 1293: NEBULA STUDIO PRO
-// Quality documentation line 1294: NEBULA STUDIO PRO
-// Quality documentation line 1295: NEBULA STUDIO PRO
-// Quality documentation line 1296: NEBULA STUDIO PRO
-// Quality documentation line 1297: NEBULA STUDIO PRO
-// Quality documentation line 1298: NEBULA STUDIO PRO
-// Quality documentation line 1299: NEBULA STUDIO PRO
-// Quality documentation line 1300: NEBULA STUDIO PRO
-// Quality documentation line 1301: NEBULA STUDIO PRO
-// Quality documentation line 1302: NEBULA STUDIO PRO
-// Quality documentation line 1303: NEBULA STUDIO PRO
-// Quality documentation line 1304: NEBULA STUDIO PRO
-// Quality documentation line 1305: NEBULA STUDIO PRO
-// Quality documentation line 1306: NEBULA STUDIO PRO
-// Quality documentation line 1307: NEBULA STUDIO PRO
-// Quality documentation line 1308: NEBULA STUDIO PRO
-// Quality documentation line 1309: NEBULA STUDIO PRO
-// Quality documentation line 1310: NEBULA STUDIO PRO
-// Quality documentation line 1311: NEBULA STUDIO PRO
-// Quality documentation line 1312: NEBULA STUDIO PRO
-// Quality documentation line 1313: NEBULA STUDIO PRO
-// Quality documentation line 1314: NEBULA STUDIO PRO
-// Quality documentation line 1315: NEBULA STUDIO PRO
-// Quality documentation line 1316: NEBULA STUDIO PRO
-// Quality documentation line 1317: NEBULA STUDIO PRO
-// Quality documentation line 1318: NEBULA STUDIO PRO
-// Quality documentation line 1319: NEBULA STUDIO PRO
-// Quality documentation line 1320: NEBULA STUDIO PRO
-// Quality documentation line 1321: NEBULA STUDIO PRO
-// Quality documentation line 1322: NEBULA STUDIO PRO
-// Quality documentation line 1323: NEBULA STUDIO PRO
-// Quality documentation line 1324: NEBULA STUDIO PRO
-// Quality documentation line 1325: NEBULA STUDIO PRO
-// Quality documentation line 1326: NEBULA STUDIO PRO
-// Quality documentation line 1327: NEBULA STUDIO PRO
-// Quality documentation line 1328: NEBULA STUDIO PRO
-// Quality documentation line 1329: NEBULA STUDIO PRO
-// Quality documentation line 1330: NEBULA STUDIO PRO
-// Quality documentation line 1331: NEBULA STUDIO PRO
-// Quality documentation line 1332: NEBULA STUDIO PRO
-// Quality documentation line 1333: NEBULA STUDIO PRO
-// Quality documentation line 1334: NEBULA STUDIO PRO
-// Quality documentation line 1335: NEBULA STUDIO PRO
-// Quality documentation line 1336: NEBULA STUDIO PRO
-// Quality documentation line 1337: NEBULA STUDIO PRO
-// Quality documentation line 1338: NEBULA STUDIO PRO
-// Quality documentation line 1339: NEBULA STUDIO PRO
-// Quality documentation line 1340: NEBULA STUDIO PRO
-// Quality documentation line 1341: NEBULA STUDIO PRO
-// Quality documentation line 1342: NEBULA STUDIO PRO
-// Quality documentation line 1343: NEBULA STUDIO PRO
-// Quality documentation line 1344: NEBULA STUDIO PRO
-// Quality documentation line 1345: NEBULA STUDIO PRO
-// Quality documentation line 1346: NEBULA STUDIO PRO
-// Quality documentation line 1347: NEBULA STUDIO PRO
-// Quality documentation line 1348: NEBULA STUDIO PRO
-// Quality documentation line 1349: NEBULA STUDIO PRO
-// Quality documentation line 1350: NEBULA STUDIO PRO
-// Quality documentation line 1351: NEBULA STUDIO PRO
-// Quality documentation line 1352: NEBULA STUDIO PRO
-// Quality documentation line 1353: NEBULA STUDIO PRO
-// Quality documentation line 1354: NEBULA STUDIO PRO
-// Quality documentation line 1355: NEBULA STUDIO PRO
-// Quality documentation line 1356: NEBULA STUDIO PRO
-// Quality documentation line 1357: NEBULA STUDIO PRO
-// Quality documentation line 1358: NEBULA STUDIO PRO
-// Quality documentation line 1359: NEBULA STUDIO PRO
-// Quality documentation line 1360: NEBULA STUDIO PRO
-// Quality documentation line 1361: NEBULA STUDIO PRO
-// Quality documentation line 1362: NEBULA STUDIO PRO
-// Quality documentation line 1363: NEBULA STUDIO PRO
-// Quality documentation line 1364: NEBULA STUDIO PRO
-// Quality documentation line 1365: NEBULA STUDIO PRO
-// Quality documentation line 1366: NEBULA STUDIO PRO
-// Quality documentation line 1367: NEBULA STUDIO PRO
-// Quality documentation line 1368: NEBULA STUDIO PRO
-// Quality documentation line 1369: NEBULA STUDIO PRO
-// Quality documentation line 1370: NEBULA STUDIO PRO
-// Quality documentation line 1371: NEBULA STUDIO PRO
-// Quality documentation line 1372: NEBULA STUDIO PRO
-// Quality documentation line 1373: NEBULA STUDIO PRO
-// Quality documentation line 1374: NEBULA STUDIO PRO
-// Quality documentation line 1375: NEBULA STUDIO PRO
-// Quality documentation line 1376: NEBULA STUDIO PRO
-// Quality documentation line 1377: NEBULA STUDIO PRO
-// Quality documentation line 1378: NEBULA STUDIO PRO
-// Quality documentation line 1379: NEBULA STUDIO PRO
-// Quality documentation line 1380: NEBULA STUDIO PRO
-// Quality documentation line 1381: NEBULA STUDIO PRO
-// Quality documentation line 1382: NEBULA STUDIO PRO
-// Quality documentation line 1383: NEBULA STUDIO PRO
-// Quality documentation line 1384: NEBULA STUDIO PRO
-// Quality documentation line 1385: NEBULA STUDIO PRO
-// Quality documentation line 1386: NEBULA STUDIO PRO
-// Quality documentation line 1387: NEBULA STUDIO PRO
-// Quality documentation line 1388: NEBULA STUDIO PRO
-// Quality documentation line 1389: NEBULA STUDIO PRO
-// Quality documentation line 1390: NEBULA STUDIO PRO
-// Quality documentation line 1391: NEBULA STUDIO PRO
-// Quality documentation line 1392: NEBULA STUDIO PRO
-// Quality documentation line 1393: NEBULA STUDIO PRO
-// Quality documentation line 1394: NEBULA STUDIO PRO
-// Quality documentation line 1395: NEBULA STUDIO PRO
-// Quality documentation line 1396: NEBULA STUDIO PRO
-// Quality documentation line 1397: NEBULA STUDIO PRO
-// Quality documentation line 1398: NEBULA STUDIO PRO
-// Quality documentation line 1399: NEBULA STUDIO PRO
-// Quality documentation line 1400: NEBULA STUDIO PRO
-// Quality documentation line 1401: NEBULA STUDIO PRO
-// Quality documentation line 1402: NEBULA STUDIO PRO
-// Quality documentation line 1403: NEBULA STUDIO PRO
-// Quality documentation line 1404: NEBULA STUDIO PRO
-// Quality documentation line 1405: NEBULA STUDIO PRO
-// Quality documentation line 1406: NEBULA STUDIO PRO
-// Quality documentation line 1407: NEBULA STUDIO PRO
-// Quality documentation line 1408: NEBULA STUDIO PRO
-// Quality documentation line 1409: NEBULA STUDIO PRO
-// Quality documentation line 1410: NEBULA STUDIO PRO
-// Quality documentation line 1411: NEBULA STUDIO PRO
-// Quality documentation line 1412: NEBULA STUDIO PRO
-// Quality documentation line 1413: NEBULA STUDIO PRO
-// Quality documentation line 1414: NEBULA STUDIO PRO
-// Quality documentation line 1415: NEBULA STUDIO PRO
-// Quality documentation line 1416: NEBULA STUDIO PRO
-// Quality documentation line 1417: NEBULA STUDIO PRO
-// Quality documentation line 1418: NEBULA STUDIO PRO
-// Quality documentation line 1419: NEBULA STUDIO PRO
-// Quality documentation line 1420: NEBULA STUDIO PRO
-// Quality documentation line 1421: NEBULA STUDIO PRO
-// Quality documentation line 1422: NEBULA STUDIO PRO
-// Quality documentation line 1423: NEBULA STUDIO PRO
-// Quality documentation line 1424: NEBULA STUDIO PRO
-// Quality documentation line 1425: NEBULA STUDIO PRO
-// Quality documentation line 1426: NEBULA STUDIO PRO
-// Quality documentation line 1427: NEBULA STUDIO PRO
-// Quality documentation line 1428: NEBULA STUDIO PRO
-// Quality documentation line 1429: NEBULA STUDIO PRO
-// Quality documentation line 1430: NEBULA STUDIO PRO
-// Quality documentation line 1431: NEBULA STUDIO PRO
-// Quality documentation line 1432: NEBULA STUDIO PRO
-// Quality documentation line 1433: NEBULA STUDIO PRO
-// Quality documentation line 1434: NEBULA STUDIO PRO
-// Quality documentation line 1435: NEBULA STUDIO PRO
-// Quality documentation line 1436: NEBULA STUDIO PRO
-// Quality documentation line 1437: NEBULA STUDIO PRO
-// Quality documentation line 1438: NEBULA STUDIO PRO
-// Quality documentation line 1439: NEBULA STUDIO PRO
-// Quality documentation line 1440: NEBULA STUDIO PRO
-// Quality documentation line 1441: NEBULA STUDIO PRO
-// Quality documentation line 1442: NEBULA STUDIO PRO
-// Quality documentation line 1443: NEBULA STUDIO PRO
-// Quality documentation line 1444: NEBULA STUDIO PRO
-// Quality documentation line 1445: NEBULA STUDIO PRO
-// Quality documentation line 1446: NEBULA STUDIO PRO
-// Quality documentation line 1447: NEBULA STUDIO PRO
-// Quality documentation line 1448: NEBULA STUDIO PRO
-// Quality documentation line 1449: NEBULA STUDIO PRO
-// Quality documentation line 1450: NEBULA STUDIO PRO
-// Quality documentation line 1451: NEBULA STUDIO PRO
-// Quality documentation line 1452: NEBULA STUDIO PRO
-// Quality documentation line 1453: NEBULA STUDIO PRO
-// Quality documentation line 1454: NEBULA STUDIO PRO
-// Quality documentation line 1455: NEBULA STUDIO PRO
-// Quality documentation line 1456: NEBULA STUDIO PRO
-// Quality documentation line 1457: NEBULA STUDIO PRO
-// Quality documentation line 1458: NEBULA STUDIO PRO
-// Quality documentation line 1459: NEBULA STUDIO PRO
-// Quality documentation line 1460: NEBULA STUDIO PRO
-// Quality documentation line 1461: NEBULA STUDIO PRO
-// Quality documentation line 1462: NEBULA STUDIO PRO
-// Quality documentation line 1463: NEBULA STUDIO PRO
-// Quality documentation line 1464: NEBULA STUDIO PRO
-// Quality documentation line 1465: NEBULA STUDIO PRO
-// Quality documentation line 1466: NEBULA STUDIO PRO
-// Quality documentation line 1467: NEBULA STUDIO PRO
-// Quality documentation line 1468: NEBULA STUDIO PRO
-// Quality documentation line 1469: NEBULA STUDIO PRO
-// Quality documentation line 1470: NEBULA STUDIO PRO
-// Quality documentation line 1471: NEBULA STUDIO PRO
-// Quality documentation line 1472: NEBULA STUDIO PRO
-// Quality documentation line 1473: NEBULA STUDIO PRO
-// Quality documentation line 1474: NEBULA STUDIO PRO
-// Quality documentation line 1475: NEBULA STUDIO PRO
-// Quality documentation line 1476: NEBULA STUDIO PRO
-// Quality documentation line 1477: NEBULA STUDIO PRO
-// Quality documentation line 1478: NEBULA STUDIO PRO
-// Quality documentation line 1479: NEBULA STUDIO PRO
-// Quality documentation line 1480: NEBULA STUDIO PRO
-// Quality documentation line 1481: NEBULA STUDIO PRO
-// Quality documentation line 1482: NEBULA STUDIO PRO
-// Quality documentation line 1483: NEBULA STUDIO PRO
-// Quality documentation line 1484: NEBULA STUDIO PRO
-// Quality documentation line 1485: NEBULA STUDIO PRO
-// Quality documentation line 1486: NEBULA STUDIO PRO
-// Quality documentation line 1487: NEBULA STUDIO PRO
-// Quality documentation line 1488: NEBULA STUDIO PRO
-// Quality documentation line 1489: NEBULA STUDIO PRO
-// Quality documentation line 1490: NEBULA STUDIO PRO
-// Quality documentation line 1491: NEBULA STUDIO PRO
-// Quality documentation line 1492: NEBULA STUDIO PRO
-// Quality documentation line 1493: NEBULA STUDIO PRO
-// Quality documentation line 1494: NEBULA STUDIO PRO
-// Quality documentation line 1495: NEBULA STUDIO PRO
-// Quality documentation line 1496: NEBULA STUDIO PRO
-// Quality documentation line 1497: NEBULA STUDIO PRO
-// Quality documentation line 1498: NEBULA STUDIO PRO
-// Quality documentation line 1499: NEBULA STUDIO PRO
-// Quality documentation line 1500: NEBULA STUDIO PRO
