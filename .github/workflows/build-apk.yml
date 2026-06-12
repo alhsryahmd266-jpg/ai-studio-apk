@@ -45,30 +45,25 @@ jobs:
           EXPO_PUBLIC_GROQ_KEY_5: ${{ secrets.GROQ_KEY_5 }}
           EXPO_PUBLIC_GROQ_KEY_6: ${{ secrets.GROQ_KEY_6 }}
           EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
+          EXPO_PUBLIC_GITHUB_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
 
       - name: Fix Gradle properties
         run: |
           chmod +x android/gradlew
-          # Remove any conflicting kotlin version entries first
           sed -i '/android\.kotlinVersion/d' android/gradle.properties
           sed -i '/kotlin\.version/d' android/gradle.properties
-          # Add stable settings
           printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\n' >> android/gradle.properties
           printf 'org.gradle.daemon=false\n' >> android/gradle.properties
           printf 'org.gradle.parallel=false\n' >> android/gradle.properties
           printf 'org.gradle.configureondemand=false\n' >> android/gradle.properties
           printf 'android.suppressUnsupportedCompileSdk=35\n' >> android/gradle.properties
+          printf 'kotlin.version=1.9.25\n' >> android/gradle.properties
           echo "=== gradle.properties ==="
           cat android/gradle.properties
 
       - name: Build Debug APK
         working-directory: android
-        run: |
-          ./gradlew assembleDebug \
-            --no-daemon \
-            -x lint \
-            --stacktrace \
-            2>&1
+        run: ./gradlew assembleDebug --no-daemon -x lint --stacktrace 2>&1
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           JAVA_HOME: ${{ env.JAVA_HOME }}
@@ -93,7 +88,7 @@ jobs:
             -keystore ai-studio.jks \
             -alias ai-studio-key \
             -keyalg RSA -keysize 4096 -validity 10000 \
-            -dname "CN=AI Studio, OU=AI, O=AIStudio, L=Cairo, ST=Cairo, C=EG" \
+            -dname "CN=NEBULA STUDIO PRO,OU=AI,O=NebulaAI,L=Cairo,ST=Cairo,C=EG" \
             -storepass AiStudio2025! -keypass AiStudio2025! -noprompt
 
       - name: Zipalign and Sign APK
@@ -103,14 +98,14 @@ jobs:
           $TOOLS/apksigner sign \
             --ks ai-studio.jks --ks-key-alias ai-studio-key \
             --ks-pass pass:AiStudio2025! --key-pass pass:AiStudio2025! \
-            --out ai-studio-signed.apk app-aligned.apk
-          echo "SIGNED_APK=ai-studio-signed.apk" >> $GITHUB_ENV
-          du -h ai-studio-signed.apk
+            --out nebula-studio-pro-signed.apk app-aligned.apk
+          echo "SIGNED_APK=nebula-studio-pro-signed.apk" >> $GITHUB_ENV
+          du -h nebula-studio-pro-signed.apk
 
-      - name: Verify APK Signature
+      - name: Verify RSA-4096 Signature
         run: |
           TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
-          $TOOLS/apksigner verify --verbose --print-certs ai-studio-signed.apk
+          $TOOLS/apksigner verify --verbose --print-certs nebula-studio-pro-signed.apk
 
       - name: Get version tag
         id: ver
@@ -120,17 +115,35 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.VER }}
-          name: "AI Studio v2 - ${{ steps.ver.outputs.VER }}"
-          body: "AI Studio v2 - Autonomous Agent + Llama 4 Maverick + DeepSeek R1 + Vision 90B + RSA-4096 signed"
-          files: ai-studio-signed.apk
+          name: "🌌 NEBULA STUDIO PRO v${{ steps.ver.outputs.VER }}"
+          body: |
+            ## NEBULA STUDIO PRO — AI Agent Mobile App
+
+            ### الميزات / Features
+            - 🤖 **Autonomous Agent** — ReAct Loop, 10 tools, persistent memory
+            - 🧠 **6 AI Models** — Llama 4 Maverick, DeepSeek R1, QwQ 32B, Vision 90B + more
+            - 🔑 **7 Rotating Groq Keys** — auto-failover, zero downtime
+            - 👁️ **Vision Analysis** — 90B parameter vision model
+            - 🌐 **Web Search** — Jina AI powered
+            - 🎨 **AI Image Generation** — Pollinations AI
+            - 🎬 **Video Storyboard** — 4-scene AI generator
+            - 🔧 **Code Builder** — generates & pushes to GitHub autonomously
+            - 🔒 **Encrypted Vault** — Android Keystore secured
+            - ✍️ **Self-Improving** — agent can push code to GitHub
+
+            ### توقيع رقمي / Digital Signature
+            - Algorithm: RSA-4096
+            - Validity: 10,000 days (~27 years)
+            - Issuer: NEBULA STUDIO PRO / Cairo, EG
+          files: nebula-studio-pro-signed.apk
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload build artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ai-studio-v2-${{ steps.ver.outputs.VER }}
-          path: ai-studio-signed.apk
+          name: nebula-studio-pro-${{ steps.ver.outputs.VER }}
+          path: nebula-studio-pro-signed.apk
           retention-days: 30
