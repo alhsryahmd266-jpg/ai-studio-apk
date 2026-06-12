@@ -46,50 +46,48 @@ jobs:
           EXPO_PUBLIC_GROQ_KEY_6: ${{ secrets.GROQ_KEY_6 }}
           EXPO_PUBLIC_GROQ_KEY_7: ${{ secrets.GROQ_KEY_7 }}
 
-      - name: Fix Kotlin version (root cause)
+      - name: Create Gradle init script (global Kotlin suppress)
         run: |
-          set -e
+          mkdir -p ~/.gradle/init.d
 
-          echo "=== Step 1: Force android.kotlinVersion=1.9.25 ==="
+          echo "allprojects {" > ~/.gradle/init.d/compose-suppress.gradle
+          echo "  afterEvaluate { proj ->" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "    proj.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "      kotlinOptions {" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "        def suppress = '-P'" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "        def flag = 'plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.24'" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "        if (!freeCompilerArgs.contains(flag)) {" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "          freeCompilerArgs = freeCompilerArgs + [suppress, flag]" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "        }" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "      }" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "    }" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "  }" >> ~/.gradle/init.d/compose-suppress.gradle
+          echo "}" >> ~/.gradle/init.d/compose-suppress.gradle
+
+          echo "=== Gradle init script contents ==="
+          cat ~/.gradle/init.d/compose-suppress.gradle
+
+      - name: Fix Kotlin and Gradle properties
+        run: |
           sed -i '/android\.kotlinVersion/d' android/gradle.properties
           sed -i '/kotlin\.version/d' android/gradle.properties
-          printf '\nandroid.kotlinVersion=1.9.25\nkotlin.version=1.9.25\n' >> android/gradle.properties
+          printf '\nandroid.kotlinVersion=1.9.24\n' >> android/gradle.properties
+          printf 'kotlin.version=1.9.24\n' >> android/gradle.properties
           printf 'android.suppressUnsupportedCompileSdk=35\n' >> android/gradle.properties
           printf 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\n' >> android/gradle.properties
           printf 'org.gradle.daemon=false\n' >> android/gradle.properties
           printf 'org.gradle.parallel=false\n' >> android/gradle.properties
-          echo "gradle.properties:"
-          grep -E "kotlinVersion|kotlin.version" android/gradle.properties
-
-          echo "=== Step 2: Downgrade Compose Compiler 1.5.15 -> 1.5.14 in expo-modules-core ==="
-          EXPO_CORE="node_modules/expo-modules-core/android/build.gradle"
-          if [ -f "$EXPO_CORE" ]; then
-            grep "kotlinCompilerExtensionVersion" "$EXPO_CORE" | head -3 || echo "no composeOptions found"
-            sed -i 's/kotlinCompilerExtensionVersion "1\.5\.15"/kotlinCompilerExtensionVersion "1.5.14"/g' "$EXPO_CORE"
-            sed -i "s/kotlinCompilerExtensionVersion '1\.5\.15'/kotlinCompilerExtensionVersion '1.5.14'/g" "$EXPO_CORE"
-            grep "kotlinCompilerExtensionVersion" "$EXPO_CORE" | head -3 || echo "no composeOptions after patch"
-            echo "expo-modules-core patched"
-          else
-            echo "expo-modules-core build.gradle not found"
-          fi
-
-          echo "=== Step 3: Scan all node_modules for Compose Compiler 1.5.15 ==="
-          find node_modules -name "build.gradle" -exec grep -l "kotlinCompilerExtensionVersion.*1\.5\.15" {} \; 2>/dev/null | while read f; do
-            echo "Patching: $f"
-            sed -i 's/kotlinCompilerExtensionVersion "1\.5\.15"/kotlinCompilerExtensionVersion "1.5.14"/g' "$f"
-            sed -i "s/kotlinCompilerExtensionVersion '1\.5\.15'/kotlinCompilerExtensionVersion '1.5.14'/g" "$f"
-          done
-          echo "Done patching"
-
-          echo "=== Step 4: Make gradlew executable ==="
+          printf 'org.gradle.configureondemand=false\n' >> android/gradle.properties
           chmod +x android/gradlew
+          echo "=== gradle.properties kotlin lines ==="
+          grep -E "kotlin" android/gradle.properties
 
       - name: Build Debug APK
         working-directory: android
         run: |
           ./gradlew assembleDebug \
-            -Pkotlin.version=1.9.25 \
-            -Pandroid.kotlinVersion=1.9.25 \
+            -Pkotlin.version=1.9.24 \
+            -Pandroid.kotlinVersion=1.9.24 \
             --no-daemon \
             -x lint \
             --stacktrace \
@@ -109,7 +107,7 @@ jobs:
             find android/app/build -type f 2>/dev/null | head -20
             exit 1
           fi
-          echo "APK found: $APK ($(du -h "$APK" | cut -f1))"
+          echo "APK: $APK ($(du -h "$APK" | cut -f1))"
           echo "APK_PATH=$APK" >> $GITHUB_ENV
 
       - name: Generate RSA-4096 Keystore
@@ -120,7 +118,6 @@ jobs:
             -keyalg RSA -keysize 4096 -validity 10000 \
             -dname "CN=AI Studio, OU=AI, O=AIStudio, L=Cairo, ST=Cairo, C=EG" \
             -storepass AiStudio2025! -keypass AiStudio2025! -noprompt
-          echo "RSA-4096 keystore ready"
 
       - name: Zipalign and Sign APK
         run: |
@@ -131,7 +128,7 @@ jobs:
             --ks-pass pass:AiStudio2025! --key-pass pass:AiStudio2025! \
             --out ai-studio-signed.apk app-aligned.apk
           echo "SIGNED_APK=ai-studio-signed.apk" >> $GITHUB_ENV
-          echo "Signed APK: $(du -h ai-studio-signed.apk | cut -f1)"
+          du -h ai-studio-signed.apk
 
       - name: Verify APK Signature
         run: |
@@ -147,7 +144,7 @@ jobs:
         with:
           tag_name: v${{ steps.ver.outputs.VER }}
           name: "AI Studio v2 - ${{ steps.ver.outputs.VER }}"
-          body: "AI Studio v2 - Autonomous Agent + 10 tools + Llama 4 Maverick + DeepSeek R1 + Vision 90B + RSA-4096 signed APK"
+          body: "AI Studio v2 - Autonomous Agent + 10 tools + Llama 4 Maverick + DeepSeek R1 + Vision 90B + RSA-4096 signed"
           files: ai-studio-signed.apk
           draft: false
           prerelease: false
