@@ -9,6 +9,8 @@ jobs:
   build:
     name: Build Signed APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 90
 
     steps:
