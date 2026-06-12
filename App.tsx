@@ -259,11 +259,14 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
     };
 
     const callGroq = async (prompt, model, history = [], system = '') => {
+      // كل رسالة تنتقل للمفتاح التالي مرة واحدة فقط
+      groqIndex.current = (groqIndex.current + 1) % 7;
+      const base = groqIndex.current;
       let lastError;
+
       for (let attempt = 0; attempt < 7; attempt++) {
-        const currentIndex = groqIndex.current;
-        groqIndex.current++;
-        const key = getGroqKey(currentIndex);
+        const n = ((base + attempt) % 7) + 1;
+        const key = keys.GROQ_OVERRIDE || process.env['EXPO_PUBLIC_GROQ_KEY_' + n] || '';
         if (!key) continue;
         try {
           const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -284,7 +287,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
           });
           if (response.status === 429 || response.status === 401) {
             const err = await response.json();
-            lastError = new Error(err.error?.message || 'Rate limit');
+            lastError = new Error(err.error?.message || 'Rate limit key ' + n);
             continue;
           }
           if (!response.ok) {
